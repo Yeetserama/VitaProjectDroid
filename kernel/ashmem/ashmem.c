@@ -379,7 +379,11 @@ static int ashmem_mmap(struct file *file, struct vm_area_struct *vma)
 		ret = -EPERM;
 		goto out;
 	}
-	vma->vm_flags &= ~calc_vm_may_flags(~asma->prot_mask);
+	/*
+	 * 6.12 makes vma->vm_flags read-only; a freshly created VMA in ->mmap
+	 * is not in the tree yet, so vm_flags_init() is the right writer.
+	 */
+	vm_flags_init(vma, vma->vm_flags & ~calc_vm_may_flags(~asma->prot_mask));
 
 	if (!asma->file) {
 		char *name = ASHMEM_NAME_DEF;
