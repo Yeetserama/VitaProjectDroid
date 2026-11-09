@@ -25,8 +25,17 @@ log() {
     echo "init.vita: $*"
 }
 
+UR0_MOUNTED=0
+
 fail() {
     log "FATAL: $*"
+    # Leave the ring buffer on ur0 so a failure before adbd starts can be read
+    # on a PC.  The periodic mirror below would otherwise overwrite this with a
+    # later snapshot that no longer contains the reason.
+    if [ "$UR0_MOUNTED" = 1 ]; then
+        $BB dmesg > /mnt/ur0/android/boot.log 2>/dev/null
+        log "kernel log saved to ur0:/android/boot.log"
+    fi
     log "Dropping to a busybox shell. Reboot the Vita to retry."
     while true; do
         /bin/sh
@@ -72,24 +81,30 @@ if ! $BB mount -t exfat -o rw,noatime "$UR0" /mnt/ur0; then
         $BB mount -o rw,noatime "$UR0" /mnt/ur0 || fail "cannot mount $UR0"
     fi
 fi
+UR0_MOUNTED=1
 
-for img in system.img userdata.img; do
-    [ -f "/mnt/ur0/android/$img" ] || fail "missing /mnt/ur0/android/$img"
-done
+mkdir -p /mnt/ur0/android 2>/dev/null
 
 # The Vita has no serial port, so mirror the kernel log (Android init and its
-# services also write to /dev/kmsg) to ur0.  Snapshot the ring buffer every
-# 30 s for the first 10 minutes; after that adbd or the log should be enough.
+# services also write to /dev/kmsg) to ur0.  Take the first snapshot
+# immediately, then refresh every 30 s for the first 10 minutes; after that
+# adbd or the saved log should be enough.  This starts before the image checks
+# so a missing or corrupt image still leaves a readable log.
 (
+    $BB dmesg > /mnt/ur0/android/boot.log 2>/dev/null
     i=0
     while [ "$i" -lt 20 ]; do
+        $BB sleep 30
         $BB dmesg > /mnt/ur0/android/boot.log.new 2>/dev/null
         $BB mv /mnt/ur0/android/boot.log.new /mnt/ur0/android/boot.log 2>/dev/null
-        $BB sleep 30
         i=$((i + 1))
     done
 ) &
 log "kernel log mirror started (ur0:/android/boot.log)"
+
+for img in system.img userdata.img; do
+    [ -f "/mnt/ur0/android/$img" ] || fail "missing /mnt/ur0/android/$img"
+done
 
 # Attach the images.  system.img is read-only; userdata.img is writable.
 # devtmpfs normally creates the loop nodes, but do not depend on it: the

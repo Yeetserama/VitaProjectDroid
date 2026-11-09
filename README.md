@@ -165,7 +165,9 @@ or Docker.
 2. Copy the new `zImage` and `vita.dtb` to `ux0:/linux/`. Keep
    `baremetal-loader.skprx` and `payload.bin` from LinuxOnVita.
 3. Copy `system.img` and `userdata.img` to `ur0:/android/`.
-4. Optional: copy a `wpa_supplicant.conf` to `ur0:/android/wpa_supplicant.conf`.
+4. Optional: copy a `wpa_supplicant.conf` to `ur0:/android/wpa_supplicant.conf`
+   (template in
+   [docs/getting-started.md](docs/getting-started.md#3-copy-files-to-the-vita)).
 5. Launch LinuxOnVita from LiveArea and press **CROSS** to boot the existing
    files.
 6. Watch the framebuffer console. When Android init starts adbd, connect from

@@ -54,7 +54,9 @@ ur0:/android/
     userdata.img              ext4, writable
     wpa_supplicant.conf       optional Wi-Fi config
     ui                        optional marker: enable the framework
+    boot.log                  kernel ring-buffer mirror from /init.vita
     vita-net.log              written by vita-net.sh for headless debugging
+    wpa_supplicant.log        copy of the glibc supplicant log
 ```
 
 `ur0:` is `/dev/mmcblk0p12` (fallbacks `/dev/mmcblk1p12` and
@@ -302,13 +304,17 @@ initramfs copies live under `/usr/...` and are symlinked into
   this kernel, so the initramfs carries LinuxOnVita 1.5.0's glibc
   `wpa_supplicant` and its dependency closure under `/vita-linux/`.
 - `vita-net.sh` runs as a `late_start` oneshot:
+  - creates `/data/misc/dhcp` and `/data/misc/dhcpcd` (`1014:1014`, mode 0770)
+    before `dhcpcd` drops to `AID_DHCP`;
   - waits for `mlan0`/`wlan0`;
   - rewrites `ur0:/android/wpa_supplicant.conf` to put the control socket under
     `/data/misc/wifi/sockets`;
-  - launches the supplicant through `/vita-linux/lib/ld-linux-armhf.so.3`;
+  - launches the supplicant through `/vita-linux/lib/ld-linux-armhf.so.3` and
+    waits for its control socket;
   - retries Android's `dhcpcd` until an IPv4 address appears;
-  - writes `/data/misc/wifi/vita-net.log` and appends the address to
-    `ur0:/android/vita-net.log`.
+  - writes `/data/misc/wifi/vita-net.log`, mirrors it to
+    `ur0:/android/vita-net.log`, and copies the supplicant log to
+    `ur0:/android/wpa_supplicant.log`.
 - `netd` expects the out-of-tree `xt_qtaguid` module. Expect errors; adbd and
   basic networking should still work. Framework-level Wi-Fi settings are a later
   problem.

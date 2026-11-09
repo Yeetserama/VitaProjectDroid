@@ -107,19 +107,41 @@ A minimal `wpa_supplicant.conf`:
 
 ```
 update_config=1
+ctrl_interface=/var/run/wpa_supplicant
 network={
     ssid="MyNetwork"
     psk="MyPassword"
+    key_mgmt=WPA-PSK
 }
 ```
 
+Add `scan_ssid=1` inside the `network={...}` block for a hidden SSID. The file
+must be plain text; CRLF from a Windows editor is tolerated.
+
 `vita-net.sh` strips any `ctrl_interface=` line, points the control socket at
-`/data/misc/wifi/sockets`, and tolerates CRLF line endings. The interface is
-`mlan0` (fallback `wlan0`). Wi-Fi is optional for the first kernel/init test but
+`/data/misc/wifi/sockets`, and creates `/data/misc/dhcp` + `/data/misc/dhcpcd`
+with owner `1014:1014` before starting `dhcpcd`. The interface is `mlan0`
+(fallback `wlan0`). Wi-Fi is optional for the first kernel/init test but
 required for adb over TCP.
 
 5. Optional UI marker: create an empty file `ur0:/android/ui` to auto-enable the
    framework. Leave it absent for the first headless boot.
+
+### First-boot checklist
+
+Before booting, `ur0:/android/` should contain:
+
+```
+system.img              ~750 MB
+userdata.img            ~550 MB
+wpa_supplicant.conf     optional, needed for adb over TCP
+ui                      optional, absent for headless boot
+```
+
+`ux0:/linux/` should contain the new `zImage` and `vita.dtb` alongside
+LinuxOnVita's `baremetal-loader.skprx` and `payload.bin`. `boot.log` and the
+other `*.log` files appear on ur0 during and after the boot; they are outputs,
+not inputs.
 
 ## 4. Boot
 
@@ -132,6 +154,7 @@ Expected sequence:
 ```
 init.vita: starting
 init.vita: mounting /dev/mmcblk0p12 on /mnt/ur0 (rw)
+init.vita: kernel log mirror started (ur0:/android/boot.log)
 init.vita: attaching Android images
 init.vita: zram0 swap enabled (128 MiB)
 init.vita: handing off to /init
@@ -145,21 +168,28 @@ If stage 1 fails, it drops to a busybox shell on the framebuffer console. Use
 that shell to check `/dev/mmcblk*`, `losetup`, and the exact paths under
 `/mnt/ur0/android/`. Reboot the Vita to retry.
 
-Stage 1 also snapshots the kernel ring buffer (which includes Android init and
-service messages) to `ur0:/android/boot.log` every 30 seconds for the first
-10 minutes. If the console is unreadable or adbd never starts, mount the card on
-the PC and read that file; its last lines show how far the boot got.
+Stage 1 snapshots the kernel ring buffer (which includes Android init and
+service messages) to `ur0:/android/boot.log` immediately after mounting ur0,
+then every 30 seconds for the first 10 minutes. On a stage-1 failure it writes a
+final snapshot before dropping to the shell. If the console is unreadable or
+adbd never starts, mount the card on the PC and read that file; its last lines
+show how far the boot got.
 
 ## 5. Connect adb
 
 Once Wi-Fi associates and DHCP succeeds, `vita-net.sh` writes the interface
-address to `/data/misc/wifi/vita-net.log` and appends it to
-`ur0:/android/vita-net.log`. On the PC:
+address to `/data/misc/wifi/vita-net.log` and to `ur0:/android/vita-net.log`.
+It also copies the supplicant log to `ur0:/android/wpa_supplicant.log`. On the
+PC:
 
 ```sh
 adb connect <vita-ip>:5555
 adb shell
 ```
+
+If the DHCP address is unknown, read `ur0:/android/vita-net.log` from VitaOS or
+mount the card on a PC; the `inet` line appears there even when adb is not
+running.
 
 `adbd` runs as root without authentication because this is a bring-up image
 (`ro.secure=0`, `ro.adb.secure=0`). Do not expose port 5555 to an untrusted
@@ -178,8 +208,10 @@ adb shell mount
 ```
 
 If adb is not reachable, check the framebuffer console for `vita-net` errors and
-the DHCP address. If the console shows Android init starting but no network,
-the Wi-Fi config or firmware path is the first thing to fix.
+the DHCP address, then read `ur0:/android/vita-net.log` and
+`ur0:/android/wpa_supplicant.log`. If the console shows Android init starting but
+no network, the Wi-Fi config, the firmware path, or `dhcpcd`'s `/data/misc/dhcp`
+directory is the first thing to fix.
 
 ## 6. Enable Wi-Fi details and the UI
 
@@ -194,7 +226,12 @@ To see the supplicant log:
 ```sh
 adb shell cat /data/misc/wifi/wpa_supplicant.log
 adb shell cat /data/misc/wifi/vita-net.log
+adb shell ls -l /data/misc/dhcp /data/misc/dhcpcd
 ```
+
+The same supplicant and network logs are mirrored to
+`ur0:/android/wpa_supplicant.log` and `ur0:/android/vita-net.log`, so they can
+be read without adb.
 
 The framework is deliberately not started. When the core system is stable,
 enable it with:
@@ -241,11 +278,12 @@ DTB, and `initramfs.cpio`.
 For the first boot, keep:
 
 - the full framebuffer-console log (photo or serial capture);
+- `ur0:/android/boot.log`;
 - `dmesg` from adb, if it starts;
 - `logcat -d` from the first Android boot;
 - `adb shell getprop`;
 - `adb shell mount`;
-- `ur0:/android/vita-net.log`;
+- `ur0:/android/vita-net.log` and `ur0:/android/wpa_supplicant.log`;
 - the exact `SHA256SUMS` and `build-info.txt` used.
 
 That is enough to separate kernel/config problems from Android userspace and
