@@ -40,7 +40,25 @@ jobs:
           key: linux-vita-a33b819fd7174f60b1d5bcb613de565b3f046687
 
       - name: Build boot package
-        run: bash scripts/build.sh
+        # The job log is only visible to signed-in users on a public repo.
+        # Mirror the tail of the build output into an always-visible check
+        # annotation and the job summary so failures can be diagnosed from
+        # the API without credentials.
+        run: |
+          set +e
+          bash scripts/build.sh 2>&1 | tee build.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            {
+              echo "## Build failed (exit $status)"
+              echo '```'
+              tail -n 100 build.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            message=$(tail -n 60 build.log | awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }' | cut -c1-60000)
+            echo "::error title=Build boot package failed::$message"
+            exit "$status"
+          fi
 
       - name: Show build information
         run: |
