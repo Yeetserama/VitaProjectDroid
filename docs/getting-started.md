@@ -100,6 +100,8 @@ With VitaShell:
 2. Copy `zImage` and `vita.dtb` from `build/out/` to `ux0:/linux/`.
    Keep LinuxOnVita's `baremetal-loader.skprx` and `payload.bin`. Do not copy
    `vita1000.dtb` over the working DTB; use `vita.dtb`.
+   Also copy `vita-selinux-disabled.dtb` there under that name, so the SELinux
+   fallback can be applied from VitaShell without a PC.
 3. Create `ur0:/android/` and copy `system.img` and `userdata.img` into it.
 4. Optional Wi-Fi config: create `ur0:/android/wpa_supplicant.conf`.
 
@@ -138,10 +140,10 @@ wpa_supplicant.conf     optional, needed for adb over TCP
 ui                      optional, absent for headless boot
 ```
 
-`ux0:/linux/` should contain the new `zImage` and `vita.dtb` alongside
-LinuxOnVita's `baremetal-loader.skprx` and `payload.bin`. `boot.log` and the
-other `*.log` files appear on ur0 during and after the boot; they are outputs,
-not inputs.
+`ux0:/linux/` should contain the new `zImage`, `vita.dtb`, and
+`vita-selinux-disabled.dtb` alongside LinuxOnVita's `baremetal-loader.skprx` and
+`payload.bin`. `boot.log` and the other `*.log` files appear on ur0 during and
+after the boot; they are outputs, not inputs.
 
 ## 4. Boot
 
