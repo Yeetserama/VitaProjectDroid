@@ -88,8 +88,9 @@ build/out/build-info.txt
 ```
 
 You can also download the same files from the GitHub Actions
-`android-on-vita-boot` artifact. The first CI build has not been run yet, so
-expect to fix a compile or config error before the package is usable.
+`android-on-vita-boot` artifact. The workflow builds and uploads the package on
+every push to `main`; the first successful build is run #4 (commit `8fc952b`).
+Its `SHA256SUMS` has been verified after download.
 
 ## 3. Copy files to the Vita
 

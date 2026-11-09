@@ -2,9 +2,11 @@
 
 Run a full Android system on a modded PlayStation Vita.
 
-**Status:** pre-boot. The kernel/initramfs boot package and the CI build are in
-place, and the prebuilt Android 5.1.1 system image has been inspected. Neither
-the kernel build nor an on-device Android boot has been run yet. Target:
+**Status:** pre-boot. The kernel/initramfs boot package now builds successfully
+in GitHub Actions (Linux 6.12, Android 5.1.1 ramdisk, ashmem included), and the
+prebuilt Android 5.1.1 system image has been inspected. The artifact is
+downloaded and hash-verified, but no on-device Android boot has been run yet.
+Target:
 **Android 5.1.1 (API 22) on a PCH-1000 (OLED)**, using the LinuxOnVita 6.12
 kernel, with **no SD2Vita adapter**. Firmware is **3.65 with HENkaku + Enso**;
 "Enable Unsafe Homebrew" is on and a full console backup has been taken. This is
