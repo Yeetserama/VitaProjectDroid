@@ -130,7 +130,9 @@ for path in \
     "$STAGE/vita-linux/usr/lib/libcrypto.so.3" \
     "$STAGE/lib/firmware/mrvl/sd8787_uapsta.bin" \
     "$STAGE/lib/firmware/regulatory.db"; do
-    [ -e "$path" ] || die "missing required initramfs file: ${path#"$STAGE"/}"
+    # Use -L as well: bin/sh is an absolute symlink to /sbin/busybox, and -e
+    # on the build host would follow it into the host's own root filesystem.
+    [ -e "$path" ] || [ -L "$path" ] || die "missing required initramfs file: ${path#"$STAGE"/}"
 done
 
 [ -x "$STAGE/init.vita" ] || die "init.vita is not executable"
