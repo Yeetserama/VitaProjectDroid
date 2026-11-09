@@ -145,6 +145,11 @@ If stage 1 fails, it drops to a busybox shell on the framebuffer console. Use
 that shell to check `/dev/mmcblk*`, `losetup`, and the exact paths under
 `/mnt/ur0/android/`. Reboot the Vita to retry.
 
+Stage 1 also snapshots the kernel ring buffer (which includes Android init and
+service messages) to `ur0:/android/boot.log` every 30 seconds for the first
+10 minutes. If the console is unreadable or adbd never starts, mount the card on
+the PC and read that file; its last lines show how far the boot got.
+
 ## 5. Connect adb
 
 Once Wi-Fi associates and DHCP succeeds, `vita-net.sh` writes the interface

@@ -77,6 +77,20 @@ for img in system.img userdata.img; do
     [ -f "/mnt/ur0/android/$img" ] || fail "missing /mnt/ur0/android/$img"
 done
 
+# The Vita has no serial port, so mirror the kernel log (Android init and its
+# services also write to /dev/kmsg) to ur0.  Snapshot the ring buffer every
+# 30 s for the first 10 minutes; after that adbd or the log should be enough.
+(
+    i=0
+    while [ "$i" -lt 20 ]; do
+        $BB dmesg > /mnt/ur0/android/boot.log.new 2>/dev/null
+        $BB mv /mnt/ur0/android/boot.log.new /mnt/ur0/android/boot.log 2>/dev/null
+        $BB sleep 30
+        i=$((i + 1))
+    done
+) &
+log "kernel log mirror started (ur0:/android/boot.log)"
+
 # Attach the images.  system.img is read-only; userdata.img is writable.
 # devtmpfs normally creates the loop nodes, but do not depend on it: the
 # loop driver's major is fixed at 7, so a manual node is safe.
