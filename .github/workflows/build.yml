@@ -1,0 +1,62 @@
+name: build
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  boot-package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bc \
+            bison \
+            ca-certificates \
+            device-tree-compiler \
+            flex \
+            gcc-arm-linux-gnueabihf \
+            libelf-dev \
+            libssl-dev \
+            python3 \
+            xz-utils
+
+      - name: Cache kernel tarball
+        uses: actions/cache@v4
+        with:
+          path: build/downloads
+          key: linux-vita-a33b819fd7174f60b1d5bcb613de565b3f046687
+
+      - name: Build boot package
+        run: bash scripts/build.sh
+
+      - name: Show build information
+        run: |
+          cat build/out/build-info.txt
+          cat build/out/SHA256SUMS
+
+      - name: Upload boot package
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-on-vita-boot
+          if-no-files-found: error
+          path: |
+            build/out/zImage
+            build/out/vita.dtb
+            build/out/vita1000.dtb
+            build/out/vita-selinux-disabled.dtb
+            build/out/initramfs.cpio
+            build/out/SHA256SUMS
+            build/out/build-info.txt

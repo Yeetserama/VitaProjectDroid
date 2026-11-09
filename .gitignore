@@ -1,0 +1,15 @@
+# Build tree
+build/
+*.o
+*.dtb
+*.cpio
+*.part
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+*.swp

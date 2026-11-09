@@ -1,0 +1,9 @@
+# Android fstab for the PlayStation Vita.
+#
+# <src>              <mnt_point>  <type>  <mnt_flags and options>                              <fs_mgr_flags>
+#
+# system.img and userdata.img are attached to loop0/loop1 by /init.vita.
+# Do not use the `check` flag: the Android ramdisk has no e2fsck.
+/dev/block/loop0     /system      ext4    ro,barrier=1                                         wait
+/dev/block/loop1     /data        ext4    noatime,nosuid,nodev,barrier=1,noauto_da_alloc      wait
+tmpfs                /cache       tmpfs   rw,nosuid,nodev,noatime,mode=0755,size=64m          defaults

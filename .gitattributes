@@ -1,0 +1,12 @@
+# Keep shell scripts and text files LF even on a Windows checkout.
+* text=auto eol=lf
+
+# Binary inputs and artifacts.
+*.img binary
+*.bin binary
+*.so binary
+*.so.* binary
+*.db binary
+*.p7s binary
+*.cpio binary
+*.dtb binary

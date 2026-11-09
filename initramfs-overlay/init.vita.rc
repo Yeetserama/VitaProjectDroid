@@ -1,0 +1,71 @@
+# Android 5.1 platform init for the PlayStation Vita (PCH-1000).
+#
+# Imported from init.rc via:
+#     import /init.${ro.hardware}.rc
+# with androidboot.hardware=vita on the kernel command line.
+
+on init
+    # SELinux and binder are set up by init itself.  debugfs is not mounted by
+    # stock Android; mount it here for tracing and sw_sync diagnostics.
+    mkdir /sys/kernel/debug 0755 root root
+    mount debugfs debugfs /sys/kernel/debug
+
+on fs
+    # /system and /data are loop-mounted from ur0; /cache is a tmpfs.
+    mount_all /fstab.vita
+
+on post-fs-data
+    # Android normally lets system_server create /data/system.  We need the
+    # directory earlier for the input-device configuration symlinks.
+    mkdir /data/system 0771 system system
+    chown system system /data/system
+    chmod 0771 /data/system
+
+    mkdir /data/system/devices 0750 system system
+    mkdir /data/system/devices/keylayout 0750 system system
+    mkdir /data/system/devices/idc 0750 system system
+
+    # EventHub looks first in $ANDROID_ROOT/usr/... and then in
+    # $ANDROID_DATA/system/devices/... .  /system is a read-only loop mount,
+    # so point the second location at files that live on the initramfs.
+    symlink /usr/keylayout/PlayStation_Vita_Buttons__Syscon_.kl /data/system/devices/keylayout/PlayStation_Vita_Buttons__Syscon_.kl
+    symlink /usr/idc/PlayStation_Vita_Touchscreen__Syscon_.idc /data/system/devices/idc/PlayStation_Vita_Touchscreen__Syscon_.idc
+
+on boot
+    # Headless bring-up: keep the heavy framework stopped until explicitly
+    # requested.  `start` on the vita.ui trigger clears SVC_DISABLED again.
+    stop zygote
+    stop surfaceflinger
+    stop media
+    stop drm
+    stop ril-daemon
+
+    # adb over TCP is the only usable debug transport on this port.
+    start adbd
+
+    # The framebuffer is exposed through the kernel's "graphics" class, which
+    # ueventd maps to /dev/graphics/fb0.  SurfaceFlinger's fbdev path needs it
+    # to be writable by the graphics group.
+    chmod 0660 /dev/graphics/fb0 2>/dev/null
+    chown root graphics /dev/graphics/fb0 2>/dev/null
+
+    write /proc/sys/vm/swappiness 100
+
+# `adb shell setprop vita.ui 1` (or touch ur0:/android/ui and reboot) turns the
+# framework on after the core services are up.
+on property:vita.ui=1
+    start zygote
+    start surfaceflinger
+
+# Wi-Fi and the optional UI marker are handled by late_start scripts.  Both
+# run after mount_all, so /system/bin/sh and /mnt/ur0 are available.
+service vita-ui /system/bin/sh /vita-ui.sh
+    class late_start
+    user root
+    oneshot
+
+service vita-net /system/bin/sh /vita-net.sh
+    class late_start
+    user root
+    group root net_admin net_raw wifi
+    oneshot

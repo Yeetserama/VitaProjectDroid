@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# Android ashmem, backported from Linux 4.19 (drivers/staging/android).
+# Kept out of the staging menu so it can live in drivers/misc on 6.12.
+
+config ASHMEM
+	bool "Enable the Anonymous Shared Memory Subsystem"
+	default n
+	depends on SHMEM
+	help
+	  The ashmem subsystem is a shared memory allocator, similar to POSIX
+	  SHM but with different behavior and a simpler file-based API.
+
+	  It is a good memory allocator for low-memory devices because it can
+	  discard shared memory units when under memory pressure.
+
+	  Android 5.x userspace requires /dev/ashmem.  Say Y when building a
+	  kernel for Android.
