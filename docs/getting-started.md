@@ -175,6 +175,18 @@ final snapshot before dropping to the shell. If the console is unreadable or
 adbd never starts, mount the card on the PC and read that file; its last lines
 show how far the boot got.
 
+### Failure signatures
+
+| Symptom | Likely cause |
+| --- | --- |
+| `FATAL: ur0 block device (mmcblkXp12) not found` | Kernel has no SCE partition parser or the wrong mmc driver; console only, nothing is written to ur0. |
+| `FATAL: missing /mnt/ur0/android/system.img` | Images are not in `ur0:/android/`, or ur0 mounted but the names differ. `boot.log` holds the final dmesg. |
+| `FATAL: losetup system.img` | `CONFIG_BLK_DEV_LOOP` missing or the image is not a regular file. |
+| **Vita reboots a few seconds after** `init.vita: handing off to /init` | SELinux policy load failed; Android 5.1 calls `android_reboot(..., "recovery")` in that case. Boot the fallback `vita-selinux-disabled.dtb`. |
+| Android init runs, `boot.log` shows `fs_mgr` mount errors | Loop nodes or ext4 mount failed; check the `fs_mgr` lines and `mount` output in `boot.log`. |
+| Console stops at `class_start core`, no `adbd` | A `critical` core service is restarting (`healthd`, `lmkd`, `servicemanager`, `ueventd`). `boot.log` names the service. After more than four crashes in four minutes init reboots into recovery. |
+| adbd never reachable, console alive | Wi-Fi/DHCP problem: read `ur0:/android/vita-net.log` and `ur0:/android/wpa_supplicant.log`. |
+
 ## 5. Connect adb
 
 Once Wi-Fi associates and DHCP succeeds, `vita-net.sh` writes the interface
@@ -246,8 +258,9 @@ has no HWC and no software GLES 2.0. Capture `logcat` before changing anything.
 
 ## 7. Fallback and recovery
 
-- **SELinux policy load fails:** copy `vita-selinux-disabled.dtb` over
-  `ux0:/linux/vita.dtb` and reboot.
+- **SELinux policy load fails:** the Vita reboots by itself a few seconds after
+  `init.vita: handing off to /init`. Copy `vita-selinux-disabled.dtb` over
+  `ux0:/linux/vita.dtb` and boot again.
 - **Kernel panics or hangs:** restore the known-good LinuxOnVita
   `zImage`/`vita.dtb` pair and boot with **CROSS**.
 - **Android init fails before adbd:** use the framebuffer console; stage 1 leaves
