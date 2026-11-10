@@ -95,6 +95,35 @@ $BB dmesg > /mnt/ur0/android/boot.log 2>/dev/null
 $BB sync
 log "initial kernel log saved (ur0:/android/boot.log); vita-log takes over"
 
+# The late_start scripts are embedded in the initramfs, but Wi-Fi and logging
+# fixes are much easier to iterate on when they can be replaced from ur0.
+# Copy a readable replacement over the embedded copy before Android init
+# starts, stripping CRLF from a Windows editor.  Write to a temporary name and
+# rename, so an interrupted copy cannot leave a truncated service script.
+for f in vita-net.sh vita-log.sh vita-ui.sh; do
+    src=/mnt/ur0/android/$f
+    [ -s "$src" ] || continue
+    # Refuse anything that does not start with a shebang: an empty file, a
+    # binary, or a script saved with a UTF-8 BOM would otherwise replace a
+    # working embedded copy with something the kernel cannot execute.
+    if [ "$($BB head -c 2 "$src" 2>/dev/null)" != "#!" ]; then
+        log "ignoring $src (does not start with #!)"
+        continue
+    fi
+    if $BB tr -d '\r' < "$src" > "/$f.new" 2>/dev/null; then
+        $BB chmod 0755 "/$f.new" 2>/dev/null
+        if $BB mv -f "/$f.new" "/$f" 2>/dev/null; then
+            log "using $src instead of the embedded $f"
+        else
+            $BB rm -f "/$f.new" 2>/dev/null
+            log "cannot replace /$f; keeping the embedded copy"
+        fi
+    else
+        $BB rm -f "/$f.new" 2>/dev/null
+        log "cannot read $src; keeping the embedded $f"
+    fi
+done
+
 for img in system.img userdata.img; do
     [ -f "/mnt/ur0/android/$img" ] || fail "missing /mnt/ur0/android/$img"
 done

@@ -120,11 +120,27 @@ network={
 Add `scan_ssid=1` inside the `network={...}` block for a hidden SSID. The file
 must be plain text; CRLF from a Windows editor is tolerated.
 
-`vita-net.sh` strips any `ctrl_interface=` line, points the control socket at
-`/data/misc/wifi/sockets`, and creates `/data/misc/dhcp` + `/data/misc/dhcpcd`
-with owner `1014:1014` before starting `dhcpcd`. The interface is `mlan0`
+`vita-net.sh` rewrites this file for Android on every boot. It strips any
+`ctrl_interface=` line, points the control socket at
+`/data/misc/wifi/sockets`, and adds `disable_scan_offload=1` so
+`wpa_supplicant` performs normal scans instead of the driver's scheduled scan.
+The first hardware boot showed mwifiex starting `sched_scan` and never
+returning results, so the supplicant never associated. If the config has no
+`country=` line, the script adds `country=IE`; put an explicit `country=XX`
+line in `wpa_supplicant.conf` to override that default.
+
+The script starts one supplicant with `-d -t` debug logging, waits for the
+carrier, then starts one `dhcpcd` instance. If normal scanning still does not
+associate, it retries once with `ap_scan=2`, which bypasses scanning entirely.
+It mirrors the last 400 supplicant log lines to
+`ur0:/android/wpa_supplicant.log` every 10 seconds. The interface is `mlan0`
 (fallback `wlan0`). Wi-Fi is optional for the first kernel/init test but
 required for adb over TCP.
+
+`ur0:/android/vita-net.sh`, `vita-log.sh`, and `vita-ui.sh` override the
+embedded copies when they start with `#!`. Copy a new script there and reboot
+to test a Wi-Fi or logging change without rebuilding `zImage`. Delete the ur0
+copy to return to the embedded version; the boot log says which copy was used.
 
 5. Optional UI marker: create an empty file `ur0:/android/ui` to auto-enable the
    framework. Leave it absent for the first headless boot.
@@ -193,6 +209,10 @@ show how far the boot got.
 | Console stops at `class_start core`, no `adbd` | A `critical` core service is restarting (`healthd`, `lmkd`, `servicemanager`, `ueventd`). `boot.log` names the service and includes recent logcat. After more than four crashes in four minutes init reboots into recovery. |
 | `servicemanager` logs `binder: driver version differs from user space` | The kernel advertises binder protocol 8. Rebuild with `-DBINDER_IPC_32BIT` in `drivers/android/Makefile`; check `build-info.txt` for `binder ABI: 32-bit (protocol 7)`. |
 | adbd never reachable, console alive | Wi-Fi/DHCP problem: read `ur0:/android/vita-net.log` and `ur0:/android/wpa_supplicant.log`. |
+| `wpa_supplicant.log` has `sched_scan start` but no `CTRL-EVENT-SCAN-RESULTS` | Scheduled-scan offload is broken on this driver/kernel. The v3 script sets `disable_scan_offload=1`; check that the generated config in `vita-net.log` contains it. |
+| `vita-net.log` shows `carrier=0` and the supplicant log has no `Trying to associate` | The supplicant has no usable scan results. Confirm the SSID is broadcast on 2.4 GHz, the AP uses WPA2-PSK, and the regdomain allows its channel. The debug log lists scan results and reject reasons. |
+| `carrier=1` but no `inet addr:` | Association works and DHCP does not. Check `dhcpcd`'s pid file under `/data/misc/dhcp`, and that `/data/misc/dhcp` is owned by `1014:1014`. |
+| `ifconfig` shows flags without `UP` | The interface was never brought up, which also explains `dhcpcd: waiting for carrier`. v3 uses busybox `ifconfig` because the Android `ip` binary produced no output on the first boot. |
 
 ## 5. Connect adb
 
@@ -245,12 +265,20 @@ To see the supplicant log:
 ```sh
 adb shell cat /data/misc/wifi/wpa_supplicant.log
 adb shell cat /data/misc/wifi/vita-net.log
+adb shell /sbin/busybox ifconfig mlan0
+adb shell cat /sys/class/net/mlan0/carrier /sys/class/net/mlan0/operstate
 adb shell ls -l /data/misc/dhcp /data/misc/dhcpcd
 ```
 
 The same supplicant and network logs are mirrored to
 `ur0:/android/wpa_supplicant.log` and `ur0:/android/vita-net.log`, so they can
-be read without adb.
+be read without adb. Each boot moves the previous copies to
+`wpa_supplicant.prev.log` and `vita-net.prev.log` before starting, so a second
+boot does not destroy the first run's evidence. If the normal-scan phase fails
+and the script restarts with `ap_scan=2`, the first phase is kept as
+`wpa_supplicant.normal.log`. The ur0 network log includes the generated
+supplicant config (with the psk removed), the carrier/operstate state blocks,
+and the mwifiex/cfg80211 dmesg lines.
 
 The framework is deliberately not started. When the core system is stable,
 enable it with:

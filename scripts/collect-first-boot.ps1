@@ -122,6 +122,9 @@ $commands = @(
     @{ Name = 'logcat.txt';         Args = @('logcat', '-d') },
     @{ Name = 'ip-addr.txt';        Args = @('ip', 'addr') },
     @{ Name = 'ip-route.txt';       Args = @('ip', 'route') },
+    @{ Name = 'ifconfig.txt';       Args = @('/sbin/busybox', 'ifconfig') },
+    @{ Name = 'route-proc.txt';     Args = @('cat', '/proc/net/route') },
+    @{ Name = 'wireless.txt';       Args = @('cat', '/proc/net/wireless') },
     @{ Name = 'mount.txt';          Args = @('mount') },
     @{ Name = 'df.txt';             Args = @('df') },
     @{ Name = 'ps.txt';             Args = @('ps') },
@@ -143,6 +146,9 @@ $pulls = @(
     @{ Remote = '/mnt/ur0/android/boot.log';                 Name = 'ur0-boot.log' },
     @{ Remote = '/mnt/ur0/android/vita-net.log';             Name = 'ur0-vita-net.log' },
     @{ Remote = '/mnt/ur0/android/wpa_supplicant.log';       Name = 'ur0-wpa_supplicant.log' },
+    @{ Remote = '/mnt/ur0/android/vita-net.prev.log';        Name = 'ur0-vita-net.prev.log' },
+    @{ Remote = '/mnt/ur0/android/wpa_supplicant.prev.log';  Name = 'ur0-wpa_supplicant.prev.log' },
+    @{ Remote = '/mnt/ur0/android/wpa_supplicant.normal.log'; Name = 'ur0-wpa_supplicant.normal.log' },
     @{ Remote = '/data/misc/wifi/vita-net.log';              Name = 'data-vita-net.log' },
     @{ Remote = '/data/misc/wifi/wpa_supplicant.log';        Name = 'data-wpa_supplicant.log' }
 )

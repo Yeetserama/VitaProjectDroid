@@ -6,6 +6,10 @@
 # /init.vita rewrote boot.log without calling sync, which is why the first
 # boot log stopped at the initial 3.8 s snapshot.  Every snapshot here is
 # written to boot.log.new and synced before it is renamed over boot.log.
+#
+# v3 prints the full process list instead of a filtered one, so the glibc
+# wpa_supplicant and dhcpcd are visible even when Wi-Fi never associates.  It
+# also records the wireless interface state on every snapshot.
 
 PATH=/bin:/sbin:/system/bin:/system/xbin
 export PATH
@@ -24,7 +28,13 @@ snapshot() {
         echo "--- init.svc ---"
         getprop 2>/dev/null | grep '^\[init\.svc\.'
         echo "--- ps ---"
-        ps 2>/dev/null | grep -E 'ueventd|healthd|lmkd|servicemanager|vold|netd|logd|adbd|zygote|surfaceflinger|bootanim|vita-'
+        ps 2>/dev/null
+        echo "--- net ---"
+        for iface in mlan0 wlan0; do
+            [ -e "/sys/class/net/$iface" ] || continue
+            echo "$iface: operstate=$(cat "/sys/class/net/$iface/operstate" 2>/dev/null) carrier=$(cat "/sys/class/net/$iface/carrier" 2>/dev/null) flags=$(cat "/sys/class/net/$iface/flags" 2>/dev/null)"
+            ifconfig "$iface" 2>&1
+        done
         echo "--- logcat (last 200 lines) ---"
         timeout 5 logcat -d -v threadtime -t 200 2>/dev/null
         echo "--- dmesg ---"
