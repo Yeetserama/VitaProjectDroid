@@ -156,7 +156,7 @@ Expected sequence:
 ```
 init.vita: starting
 init.vita: mounting /dev/mmcblk0p12 on /mnt/ur0 (rw)
-init.vita: kernel log mirror started (ur0:/android/boot.log)
+init.vita: initial kernel log saved (ur0:/android/boot.log); vita-log takes over
 init.vita: attaching Android images
 init.vita: zram0 swap enabled (128 MiB)
 init.vita: handing off to /init
@@ -265,14 +265,15 @@ has no HWC and no software GLES 2.0. Capture `logcat` before changing anything.
 
 ## 7. Fallback and recovery
 
-- **SELinux policy load fails:** the Vita reboots by itself a few seconds after
-  `init.vita: handing off to /init`. Copy `vita-selinux-disabled.dtb` over
-  `ux0:/linux/vita.dtb` and boot again.
+- **Vita reboots by itself after handoff:** read `ur0:/android/boot.log`. The
+  synced snapshot names any critical service that is crash-looping and includes
+  the last logcat lines. If it shows that the SELinux policy failed to load,
+  copy `vita-selinux-disabled.dtb` over `ux0:/linux/vita.dtb` and boot again.
 - **Kernel panics or hangs:** restore the known-good LinuxOnVita
   `zImage`/`vita.dtb` pair and boot with **CROSS**.
 - **Android init fails before adbd:** read the framebuffer console; with
   `loglevel 7` it shows init and service messages. If no output is visible,
-  the card's `boot.log` is authoritative. Stage 1 leaves a busybox shell on
+  `ur0:/android/boot.log` is authoritative. Stage 1 leaves a busybox shell on
   failure, but there is no keyboard, so use the log.
 - **ur0 corruption:** restore the console backup. Keep clean shutdowns and avoid
   writes while experimenting.
