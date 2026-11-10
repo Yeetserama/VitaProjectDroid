@@ -1,0 +1,90 @@
+name: glbench
+
+on:
+  push:
+    branches: [ feat/glbench ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bundle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            binutils-arm-linux-gnueabihf \
+            bison \
+            ca-certificates \
+            curl \
+            flex \
+            g++-arm-linux-gnueabihf \
+            gcc-arm-linux-gnueabihf \
+            meson \
+            ninja-build \
+            pkg-config \
+            python3-mako \
+            python3-yaml \
+            qemu-user-static \
+            xz-utils
+
+      - name: Build the armhf bundle
+        run: bash scripts/build-glbench.sh
+
+      - name: Smoke test the bundle under qemu
+        run: |
+          set -x
+          BUNDLE="$PWD/build/glbench/bundle"
+          export GALLIUM_DRIVER=softpipe
+          export LIBGL_ALWAYS_SOFTWARE=1
+          export LIBGL_DRIVERS_PATH="$BUNDLE/dri"
+          export MESA_LOADER_DRIVER_OVERRIDE=swrast
+          qemu-arm-static -L / \
+            "$BUNDLE/lib/ld-linux-armhf.so.3" \
+            --inhibit-cache \
+            --library-path "$BUNDLE/lib:$BUNDLE/dri" \
+            "$BUNDLE/glbench" \
+            --width 64 --height 64 --frames 2 --ui-frames 1 --no-present
+
+      - name: Upload the bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: glbench-armhf
+          path: |
+            build/glbench/glbench-vita-armhf.tar.gz
+            build/glbench/SHA256SUMS
+          if-no-files-found: error
+
+      - name: Publish glbench-latest
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: glbench-latest
+          name: glbench software GLES2 bundle
+          body: |
+            Self-contained armhf Mesa 24.0.9 softpipe bundle for the PS Vita
+            software GLES2 performance gate.
+
+            It runs on the Vita's Linux userspace (glibc bundled), renders
+            960x544 offscreen, and can present to `/dev/graphics/fb0`.
+
+            Install with `adb push glbench /data/glbench`, then:
+
+            ```
+            cd /data/glbench
+            sh run.sh
+            ```
+
+            Build log: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          files: |
+            build/glbench/glbench-vita-armhf.tar.gz
+            build/glbench/SHA256SUMS
+          prerelease: true
+          make_latest: false

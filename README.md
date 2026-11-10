@@ -203,6 +203,10 @@ the console; hold **L** during power-on if a taiHEN plugin misbehaves.
   actually needs.
 - [docs/boot-and-storage.md](docs/boot-and-storage.md) - boot chain, kernel
   changes, initramfs, loop-mounted images, display, input, and Wi-Fi paths.
+- [docs/glbench.md](docs/glbench.md) - the software GLES2 performance gate:
+  what it measures, how to run it on the Vita, and how to read the result.
+- [docs/gpu-research.md](docs/gpu-research.md) - why a PowerVR SGX driver is
+  not a v0.2 path, and what a real probe would have to prove.
 - [docs/roadmap.md](docs/roadmap.md) - phased plan with exit criteria.
 - [docs/sources.md](docs/sources.md) - links to the projects and references.
 - [docs/open-questions.md](docs/open-questions.md) - decisions made and the
