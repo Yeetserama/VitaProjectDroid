@@ -166,9 +166,10 @@ Android init then imports `/init.vita.rc`, mounts `/system`, `/data`, and
 `/cache` from `fstab.vita`, starts the core services, and starts `adbd`. The
 framework stays stopped.
 
-If stage 1 fails, it drops to a busybox shell on the framebuffer console. Use
-that shell to check `/dev/mmcblk*`, `losetup`, and the exact paths under
-`/mnt/ur0/android/`. Reboot the Vita to retry.
+If stage 1 fails, it drops to a busybox shell on the framebuffer console. The
+Vita has no keyboard in Linux, so treat the shell as a visual indicator rather
+than a recovery console; `ur0:/android/boot.log` is the file to read. Reboot the
+Vita to retry.
 
 Stage 1 snapshots the kernel ring buffer (which includes Android init and
 service messages) to `ur0:/android/boot.log` immediately after mounting ur0,
@@ -265,8 +266,10 @@ has no HWC and no software GLES 2.0. Capture `logcat` before changing anything.
   `ux0:/linux/vita.dtb` and boot again.
 - **Kernel panics or hangs:** restore the known-good LinuxOnVita
   `zImage`/`vita.dtb` pair and boot with **CROSS**.
-- **Android init fails before adbd:** use the framebuffer console; stage 1 leaves
-  a busybox shell on failure.
+- **Android init fails before adbd:** read the framebuffer console; with
+  `loglevel 7` it shows init and service messages. If no output is visible,
+  the card's `boot.log` is authoritative. Stage 1 leaves a busybox shell on
+  failure, but there is no keyboard, so use the log.
 - **ur0 corruption:** restore the console backup. Keep clean shutdowns and avoid
   writes while experimenting.
 - **Boot loop in VitaOS:** hold **L** during power-on to bypass taiHEN plugins,

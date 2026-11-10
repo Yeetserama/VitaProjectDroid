@@ -32,6 +32,13 @@ on post-fs-data
     symlink /usr/idc/PlayStation_Vita_Touchscreen__Syscon_.idc /data/system/devices/idc/PlayStation_Vita_Touchscreen__Syscon_.idc
 
 on boot
+    # Android's own `on init` sets loglevel 3, which hides init/service and
+    # vita-net progress from the framebuffer.  This is a headless bring-up
+    # image, so raise it again for the rest of the boot: the console is the
+    # only live output until adb is reachable.  boot.log keeps everything
+    # regardless.
+    loglevel 7
+
     # Headless bring-up: keep the heavy framework stopped until explicitly
     # requested.  `start` on the vita.ui trigger clears SVC_DISABLED again.
     stop zygote
