@@ -34,7 +34,7 @@ for the Vita without building AOSP.
 - Recover LinuxOnVita 1.5.0's glibc `wpa_supplicant`, dependency closure, and
   SD8787 firmware into `vendor/vita-linux/`.
 - Write `init.vita`, `init.vita.rc`, `fstab.vita`, `ueventd.vita.rc`,
-  `default.prop`, `vita-net.sh`, and `vita-ui.sh`.
+  `default.prop`, `vita-log.sh`, `vita-net.sh`, and `vita-ui.sh`.
 - Backport ashmem from Linux 4.19 to 6.12; wire it into `drivers/misc`.
 - Merge `kernel/config/vita-android.fragment` over `vita_defconfig`.
 - Build `zImage` and `vita1000.dtb`; patch the DTB bootargs with `fdtput`.

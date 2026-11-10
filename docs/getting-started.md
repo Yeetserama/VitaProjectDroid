@@ -172,10 +172,13 @@ than a recovery console; `ur0:/android/boot.log` is the file to read. Reboot the
 Vita to retry.
 
 Stage 1 snapshots the kernel ring buffer (which includes Android init and
-service messages) to `ur0:/android/boot.log` immediately after mounting ur0,
-then every 30 seconds for the first 10 minutes. On a stage-1 failure it writes a
+service messages) to `ur0:/android/boot.log` immediately after mounting ur0.
+Once `class core` starts, the `vita-log` init service refreshes it with a
+snapshot every 2 seconds for two minutes, then every 30 seconds for ten more
+minutes; each snapshot is `sync`ed before it is renamed over `boot.log`, so a
+reset cannot lose the latest one. On a stage-1 failure `/init.vita` writes a
 final snapshot before dropping to the shell. If the console is unreadable or
-adbd never starts, mount the card on the PC and read that file; its last lines
+adbd never starts, open `ur0:` from VitaOS and read that file; its last lines
 show how far the boot got.
 
 ### Failure signatures

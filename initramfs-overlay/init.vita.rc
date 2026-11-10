@@ -64,6 +64,16 @@ on property:vita.ui=1
     start zygote
     start surfaceflinger
 
+# Keep a synced kernel-log snapshot on ur0.  Android init sets panic_on_oops=1,
+# so a kernel oops or a critical-service crash loop can reset the Vita at any
+# moment; an unsynced exFAT snapshot does not survive that.  The script snapshots
+# every 2 s for two minutes, then every 30 s for ten more minutes and exits.
+service vita-log /system/bin/sh /vita-log.sh
+    class core
+    user root
+    group root system
+    oneshot
+
 # Wi-Fi and the optional UI marker are handled by late_start scripts.  Both
 # run after mount_all, so /system/bin/sh and /mnt/ur0 are available.
 service vita-ui /system/bin/sh /vita-ui.sh

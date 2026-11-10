@@ -34,6 +34,7 @@ fail() {
     # later snapshot that no longer contains the reason.
     if [ "$UR0_MOUNTED" = 1 ]; then
         $BB dmesg > /mnt/ur0/android/boot.log 2>/dev/null
+        $BB sync
         log "kernel log saved to ur0:/android/boot.log"
     fi
     log "Dropping to a busybox shell. Reboot the Vita to retry."
@@ -86,21 +87,13 @@ UR0_MOUNTED=1
 mkdir -p /mnt/ur0/android 2>/dev/null
 
 # The Vita has no serial port, so mirror the kernel log (Android init and its
-# services also write to /dev/kmsg) to ur0.  Take the first snapshot
-# immediately, then refresh every 30 s for the first 10 minutes; after that
-# adbd or the saved log should be enough.  This starts before the image checks
-# so a missing or corrupt image still leaves a readable log.
-(
-    $BB dmesg > /mnt/ur0/android/boot.log 2>/dev/null
-    i=0
-    while [ "$i" -lt 20 ]; do
-        $BB sleep 30
-        $BB dmesg > /mnt/ur0/android/boot.log.new 2>/dev/null
-        $BB mv /mnt/ur0/android/boot.log.new /mnt/ur0/android/boot.log 2>/dev/null
-        i=$((i + 1))
-    done
-) &
-log "kernel log mirror started (ur0:/android/boot.log)"
+# services also write to /dev/kmsg) to ur0.  Take an initial snapshot here so a
+# failure before Android init still leaves a readable log.  The vita-log init
+# service takes over after /system is mounted and refreshes it every 2 s with
+# sync, which is what preserves the log across a hard reset.
+$BB dmesg > /mnt/ur0/android/boot.log 2>/dev/null
+$BB sync
+log "initial kernel log saved (ur0:/android/boot.log); vita-log takes over"
 
 for img in system.img userdata.img; do
     [ -f "/mnt/ur0/android/$img" ] || fail "missing /mnt/ur0/android/$img"

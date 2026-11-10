@@ -54,7 +54,7 @@ ur0:/android/
     userdata.img              ext4, writable
     wpa_supplicant.conf       optional Wi-Fi config
     ui                        optional marker: enable the framework
-    boot.log                  kernel ring-buffer mirror from /init.vita
+    boot.log                  synced kernel/service snapshot (vita-log)
     vita-net.log              written by vita-net.sh for headless debugging
     wpa_supplicant.log        copy of the glibc supplicant log
 ```
@@ -154,8 +154,8 @@ The kernel embeds a single raw newc cpio built by
 1. Unpack `prebuilt/ramdisk.img` (stock Android 5.1.1 ARM ramdisk).
 2. Remove goldfish/ranchu files.
 3. Add `initramfs-overlay/`: `/init.vita`, `/init.vita.rc`, `/fstab.vita`,
-   `/ueventd.vita.rc`, `/default.prop`, `/vita-net.sh`, `/vita-ui.sh`, and the
-   input keylayout/IDC files.
+   `/ueventd.vita.rc`, `/default.prop`, `/vita-log.sh`, `/vita-net.sh`,
+   `/vita-ui.sh`, and the input keylayout/IDC files.
 4. Add static ARM busybox as `/sbin/busybox` and `/bin/sh`.
 5. Add the glibc Wi-Fi userspace and firmware from `vendor/vita-linux/` under
    `/vita-linux/` and `/lib/firmware/`.
