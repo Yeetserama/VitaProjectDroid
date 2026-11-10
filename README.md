@@ -2,10 +2,14 @@
 
 Run a full Android system on a modded PlayStation Vita.
 
-**Status:** pre-boot. The kernel/initramfs boot package now builds successfully
-in GitHub Actions (Linux 6.12, Android 5.1.1 ramdisk, ashmem included), and the
-prebuilt Android 5.1.1 system image has been inspected. The artifact is
-downloaded and hash-verified, but no on-device Android boot has been run yet.
+**Status:** first-boot bring-up. The kernel/initramfs boot package builds in
+GitHub Actions (Linux 6.12, Android 5.1.1 ramdisk, ashmem included) and the
+artifact is hash-verified. The first on-device boot reached Android
+`late_start` and started Wi-Fi, then reset to VitaOS. Source analysis showed
+that the kernel advertised binder protocol 8 while Android 5.1's 32-bit
+userspace requires protocol 7, crash-looping `servicemanager`. The current
+build selects the 32-bit binder ABI and keeps a synced boot log; a hardware
+retest is pending.
 Target:
 **Android 5.1.1 (API 22) on a PCH-1000 (OLED)**, using the LinuxOnVita 6.12
 kernel, with **no SD2Vita adapter**. Firmware is **3.65 with HENkaku + Enso**;
@@ -110,8 +114,10 @@ exFAT. See [docs/ur0-storage-plan.md](docs/ur0-storage-plan.md).
 
 ## What still needs work
 
-1. **First headless boot:** build the package in CI, copy it to the Vita, and
-   reach `adbd` over TCP. No Android boot has been attempted yet.
+1. **First headless boot:** reach `adbd` over TCP. The first attempt reached
+   Android `late_start` and Wi-Fi but reset when `servicemanager` rejected the
+   kernel's binder protocol; the next build selects the 32-bit ABI and adds a
+   synced `ur0:/android/boot.log`.
 2. **Software GLES 2.0:** the SDK image contains only `gralloc.default` and a
    software GLES 1.1 renderer; there is no GLES 2.0 software driver and no
    `hwcomposer.*` HAL. SurfaceFlinger needs GLES 2.0 before the UI can start.
@@ -123,8 +129,8 @@ exFAT. See [docs/ur0-storage-plan.md](docs/ur0-storage-plan.md).
    disabled DTBs available.
 5. **netd:** Android 5.1's netd expects the out-of-tree `xt_qtaguid` module.
    Expect errors; it should not block adbd.
-6. **Wi-Fi:** the glibc supplicant + Android `dhcpcd` path has not been tested on
-   hardware.
+6. **Wi-Fi:** the glibc supplicant starts and its control socket comes up, but
+   DHCP and adb over TCP have not completed a full on-device boot yet.
 7. **Input, audio, battery, sensors:** input drivers exist; everything else is a
    stub or missing.
 
