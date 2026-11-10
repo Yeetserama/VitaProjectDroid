@@ -49,6 +49,9 @@ cp -a "$ROOT/kernel/ashmem" "$KERNEL_SRC/drivers/misc/ashmem"
 echo "==> wiring ashmem and Vita DTBs into the tree"
 python3 "$ROOT/scripts/patch-kernel-tree.py" "$KERNEL_SRC"
 
+grep -qF -- '-DBINDER_IPC_32BIT' "$KERNEL_SRC/drivers/android/Makefile" \
+    || die "drivers/android/Makefile does not select the 32-bit binder ABI"
+
 echo "==> configuring kernel"
 make -C "$KERNEL_SRC" ARCH="$ARCH" CROSS_COMPILE="$CROSS_COMPILE" vita_defconfig >/dev/null
 
@@ -142,6 +145,7 @@ fdtput -t s "$OUT/vita-selinux-disabled.dtb" /chosen bootargs \
     echo "kernel commit: a33b819fd7174f60b1d5bcb613de565b3f046687"
     echo "built: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "toolchain: $("${CROSS_COMPILE}gcc" --version | head -n 1)"
+    echo "binder ABI: 32-bit (protocol 7)"
     echo "initramfs bytes: $(stat -c %s "$OUT/initramfs.cpio" 2>/dev/null || wc -c < "$OUT/initramfs.cpio")"
     echo "zImage bytes: $(stat -c %s "$OUT/zImage" 2>/dev/null || wc -c < "$OUT/zImage")"
     echo

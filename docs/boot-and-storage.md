@@ -90,7 +90,8 @@ The kernel is the pinned `incognitojam/linux_vita` 6.12 tree plus:
 - `kernel/ashmem/` - ashmem backported from Linux 4.19 and adapted to 6.12
   (`shrinker_alloc`/`shrinker_register`, `vfs_iter_read`, `shmem_file_setup`).
 - `scripts/patch-kernel-tree.py` - wires ashmem into
-  `drivers/misc/Kconfig` and `drivers/misc/Makefile`, and adds the Vita DTBs to
+  `drivers/misc/Kconfig` and `drivers/misc/Makefile`, selects the 32-bit binder
+  ABI in `drivers/android/Makefile`, and adds the Vita DTBs to
   `arch/arm/boot/dts/Makefile`.
 - `kernel/config/vita-android.fragment` - merged over
   `arch/arm/configs/vita_defconfig` with `merge_config.sh`.
@@ -124,9 +125,22 @@ first.
 
 ### 3.2 binder and sync
 
-Binder is already in mainline and works on 32-bit ARM. `CONFIG_SW_SYNC` gives
-Android's `libsync` the `/dev/sw_sync` device it expects. SurfaceFlinger uses
-fences even with a CPU composer, so `SYNC_FILE` and `SW_SYNC` stay enabled.
+Binder itself is in mainline, but it has two ABIs: 32-bit (protocol 7) and
+64-bit (protocol 8). Linux 6.12 no longer exposes a Kconfig option for the
+32-bit one. On a 32-bit ARM kernel without `BINDER_IPC_32BIT`, the driver
+advertises protocol 8 and uses 64-bit `binder_uintptr_t`/`binder_size_t`, while
+Android 5.1's 32-bit `libbinder` requires protocol 7 and 32-bit fields.
+`servicemanager` then exits with `binder: driver version differs from user
+space`, which is fatal because it is a critical service.
+
+`scripts/patch-kernel-tree.py` therefore appends
+`ccflags-y += -DBINDER_IPC_32BIT` to `drivers/android/Makefile`, and
+`apply-kernel.sh` refuses to build if the flag is missing. The build
+information records `binder ABI: 32-bit (protocol 7)`.
+
+`CONFIG_SW_SYNC` gives Android's `libsync` the `/dev/sw_sync` device it expects.
+SurfaceFlinger uses fences even with a CPU composer, so `SYNC_FILE` and
+`SW_SYNC` stay enabled.
 
 ### 3.3 SELinux
 

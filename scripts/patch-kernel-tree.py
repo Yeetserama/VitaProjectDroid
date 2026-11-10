@@ -2,8 +2,9 @@
 """Apply the small, text-only kernel-tree changes needed by this project.
 
 The ashmem driver itself is copied into drivers/misc/ashmem by
-apply-kernel.sh; this script only wires it into Kconfig/Makefile and adds the
-Vita DTBs to the ARM dts Makefile.  All edits are idempotent.
+apply-kernel.sh; this script wires it into Kconfig/Makefile, adds the Vita DTBs
+to the ARM dts Makefile, and selects the 32-bit binder ABI.  All edits are
+idempotent.
 """
 
 from __future__ import annotations
@@ -51,6 +52,30 @@ def patch_makefile(tree: str) -> bool:
     return True
 
 
+def patch_binder_makefile(tree: str) -> bool:
+    """Select the 32-bit binder ABI.
+
+    Android 5.1 userspace is 32-bit and libbinder rejects any driver whose
+    protocol version is not 7.  Linux 6.12's binder.h only reports 7 (and only
+    uses 32-bit binder_uintptr_t/binder_size_t) when BINDER_IPC_32BIT is
+    defined.  Mainline no longer exposes a Kconfig symbol for it, so define it
+    for every object in drivers/android/.
+    """
+    path = os.path.join(tree, "drivers/android/Makefile")
+    text = read(path)
+    if "BINDER_IPC_32BIT" in text:
+        return False
+    if not text.endswith("\n"):
+        text += "\n"
+    text += (
+        "\n# AndroidOnVita: 32-bit ARM Android 5.1 userspace expects binder\n"
+        "# protocol 7 and 32-bit binder_uintptr_t/binder_size_t.\n"
+        "ccflags-y += -DBINDER_IPC_32BIT\n"
+    )
+    write(path, text)
+    return True
+
+
 def patch_dts_makefile(tree: str) -> bool:
     path = os.path.join(tree, "arch/arm/boot/dts/Makefile")
     text = read(path)
@@ -79,6 +104,8 @@ def main(argv: list[str]) -> int:
             changed.append("drivers/misc/Kconfig")
         if patch_makefile(tree):
             changed.append("drivers/misc/Makefile")
+        if patch_binder_makefile(tree):
+            changed.append("drivers/android/Makefile")
         if patch_dts_makefile(tree):
             changed.append("arch/arm/boot/dts/Makefile")
     except (OSError, ValueError) as exc:

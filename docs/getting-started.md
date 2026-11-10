@@ -190,7 +190,8 @@ show how far the boot got.
 | `FATAL: losetup system.img` | `CONFIG_BLK_DEV_LOOP` missing or the image is not a regular file. |
 | **Vita reboots a few seconds after** `init.vita: handing off to /init` | SELinux policy load failed; Android 5.1 calls `android_reboot(..., "recovery")` in that case. Boot the fallback `vita-selinux-disabled.dtb`. |
 | Android init runs, `boot.log` shows `fs_mgr` mount errors | Loop nodes or ext4 mount failed; check the `fs_mgr` lines and `mount` output in `boot.log`. |
-| Console stops at `class_start core`, no `adbd` | A `critical` core service is restarting (`healthd`, `lmkd`, `servicemanager`, `ueventd`). `boot.log` names the service. After more than four crashes in four minutes init reboots into recovery. |
+| Console stops at `class_start core`, no `adbd` | A `critical` core service is restarting (`healthd`, `lmkd`, `servicemanager`, `ueventd`). `boot.log` names the service and includes recent logcat. After more than four crashes in four minutes init reboots into recovery. |
+| `servicemanager` logs `binder: driver version differs from user space` | The kernel advertises binder protocol 8. Rebuild with `-DBINDER_IPC_32BIT` in `drivers/android/Makefile`; check `build-info.txt` for `binder ABI: 32-bit (protocol 7)`. |
 | adbd never reachable, console alive | Wi-Fi/DHCP problem: read `ur0:/android/vita-net.log` and `ur0:/android/wpa_supplicant.log`. |
 
 ## 5. Connect adb
