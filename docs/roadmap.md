@@ -21,8 +21,8 @@ the hardware inventory is recorded.
 
 ## Phase 1 - Prebuilt image and boot package
 
-**Status: in progress.** Scripts and CI are written; the first kernel build has
-not run.
+**Status: complete.** CI produces a hash-verified `zImage`, DTBs and
+initramfs, and the required-symbol checks pass.
 
 **Goal:** produce a reproducible `zImage` + `vita.dtb` + `initramfs.cpio` package
 for the Vita without building AOSP.
@@ -47,7 +47,9 @@ required-symbol checks pass.
 
 ## Phase 2 - First headless Android boot
 
-**Status: next.**
+**Status: complete.** Android reaches `late_start` headless and adbd is
+reachable over Wi-Fi. The binder ABI is protocol 7 to match the 32-bit
+userspace.
 
 **Goal:** Android's init runs on real Vita hardware and adbd is reachable.
 
@@ -67,6 +69,10 @@ required-symbol checks pass.
 there is no kernel panic for at least 10 minutes.
 
 ## Phase 3 - Storage, data, and networking
+
+**Status: networking and storage verified; boot-cycle soak still open.** Wi-Fi
+associates, DHCP leases, and `adb connect` works on both a hotspot and a
+mobile-data network after the v6 policy-rule repair.
 
 **Goal:** Android has persistent `/data` and a working debug/network path.
 
@@ -98,7 +104,11 @@ simple Android app can be navigated with the Vita controls.
 
 ## Phase 5 - Display and graphics
 
-**Status: blocked on the missing GLES 2.0 path.**
+**Status: software GLES2 gate passed; framework integration next.** The
+self-contained `glbench` bundle reached about **30 fps effective** at 960x544
+with Mesa softpipe and the fb0 present copy, and the color order was correct.
+That is the comfort target. The remaining work is the EGL/GLES and presenter
+glue inside Android.
 
 **Goal:** SurfaceFlinger presents frames and a trivial GLES 2.0 app runs.
 

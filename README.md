@@ -9,8 +9,10 @@ both a hotspot and a mobile-data network. Two fixes got there: the kernel
 selects the 32-bit binder ABI (protocol 7) that Android 5.1's userspace
 requires, and v6 restores the `lookup main` policy rule that Android 5.1's
 netd flushes (its replacement rule is rejected with `EINVAL` on mainline
-kernels). Next: v0.2, a launcher/UI on the software GLES2 path, gated on the
-20 fps benchmark.
+kernels). The software GLES2 gate also passed on hardware: the `glbench`
+bundle rendered a launcher-like scene at about **30 fps effective** at
+960x544 with Mesa softpipe, including the fb0 present copy. Next: v0.2, the
+launcher/UI integration.
 Target:
 **Android 5.1.1 (API 22) on a PCH-1000 (OLED)**, using the LinuxOnVita 6.12
 kernel, with **no SD2Vita adapter**. Firmware is **3.65 with HENkaku + Enso**;
