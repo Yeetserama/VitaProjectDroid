@@ -135,12 +135,23 @@ Gate: modules imported, functions named, manifest complete. No hardware risk.
 
 ### A1. Codec bring-up (no RE required)
 
-- Add a `wm8962` I2C node at `0x1A` on the bus used by the codec.
-- Enable `CONFIG_SND_SOC_WM8962` and the simple-card/ASoC core.
-- Feed MCLK from the P1P40167 helper (24.576 MHz for 48 kHz).
-- Probe and read the chip ID.
+Implemented on `re/audio` as two tracked kernel patches:
+
+- `kernel/patches/0001-...`: `vita-syscon.c` gains an AudioClk set helper and
+  registers a `vita-audio-clk` provider. The clock's prepare/unprepare ops
+  drive clockgen register 1 (bit 4 enable, bit 0 rate family).
+- `kernel/patches/0002-...`: the codec node is
+  `wlf,wm8962` at `0x1A` on i2c0, with `clocks = <&syscon>`; the syscon node
+  gets `#clock-cells`. The property `vita,audio-clk-always-on` keeps MCLK on.
+- `kernel/config/vita-android.fragment` enables `CONFIG_SOUND`, `CONFIG_SND`,
+  `CONFIG_SND_SOC` and `CONFIG_SND_SOC_WM8962`.
+
+The clock provider is what makes probe ordering deterministic: the codec
+defers until the provider exists, and the provider is only registered after
+the clockgen I2C adapter is available.
 
 Gate: `wm8962` binds, reads ID `0x6243`, and register access is stable.
+Bring-up notes: [`re/notes/audio-a1.md`](../re/notes/audio-a1.md).
 
 ### A2. Find the SoC I2S/DMA controller
 
