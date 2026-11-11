@@ -19,10 +19,26 @@
 # v5 checks adb itself.  The v4 boot had a stable link and a running adbd but
 # the PC could neither ping the Vita nor connect to 5555, so the log now
 # records whether adbd really owns a LISTEN socket, the address to connect to,
-# the gateway ping, the ARP cache, the route table and the INPUT rules.  The kernel fragment also disables
-# cfg80211 power save: the SD8787 firmware can drop unicast frames while the
-# station sleeps between beacons, which would leave DHCP (broadcast) working
-# while ping and adb time out.
+# the gateway ping, the ARP cache, the route table and the INPUT rules.  The
+# kernel fragment also disables cfg80211 power save: the SD8787 firmware can
+# drop unicast frames while the station sleeps between beacons, which would
+# leave DHCP (broadcast) working while ping and adb time out.
+#
+# v6 repairs Android's policy routing.  The v5 log showed a DHCP lease, a
+# LISTEN socket and a directly-connected route in the main table, but
+# "ping: sendto: Network unreachable" and an empty ARP cache: no frame ever
+# left the Vita.  Android 5.1 netd's RouteController::Init() starts with
+# `ip rule flush`, which deletes the kernel's default "from all lookup main"
+# rule.  It then fails to add the replacement: Android encodes the UID range
+# of its "directly connected" rule in the private attributes FRA 18/19, which
+# mainline assigns to FRA_FWMARK/FRA_FLOW, so the kernel rejects the rule with
+# EINVAL ("failed to initialize RouteController (Invalid argument)").  The
+# failure is deterministic on this kernel, not a race.  With no rule
+# consulting the main table every unicast destination is unreachable even
+# though dhcpcd installed the subnet route, while DHCP (broadcast/raw) still
+# works.  The script restores a "lookup main" rule and the default route after
+# every lease, keeps them in place from the watchdog, and logs the rules and
+# the kernel's own route lookup before and after the repair.
 #
 # This script therefore:
 #   * adds disable_scan_offload=1 so wpa_supplicant performs normal scans,
@@ -30,8 +46,10 @@
 #   * runs one supplicant with -d -t debug logging and mirrors the log to ur0,
 #   * waits for the carrier to come up before starting dhcpcd exactly once,
 #   * retries once with ap_scan=2 if normal scanning still does not associate,
-#   * keeps a watchdog on carrier and lease after the first successful lease,
-#   * verifies adbd is listening after every lease and logs the connect command.
+#   * restores the policy rule and default route that netd removed,
+#   * keeps a watchdog on carrier, lease and routing after the first lease,
+#   * verifies adbd is listening after every lease and logs the connect command,
+#   * prints the connect command on the Vita's framebuffer console.
 #
 # Every script can also be overridden from ur0:/android/; see /init.vita.
 
@@ -92,33 +110,172 @@ adb_listener() {
         /proc/net/tcp /proc/net/tcp6 2>/dev/null
 }
 
+# Netmask of the lease, e.g. 255.255.255.0.
+iface_mask() {
+    /sbin/busybox ifconfig "$IFACE" 2>/dev/null \
+        | sed -n 's/.*Mask:\([0-9.]*\).*/\1/p' | head -n 1
+}
+
+# Length of a dotted-quad netmask, e.g. 255.255.255.0 -> 24.
+mask_prefix() {
+    iface_mask | awk -F. 'NF == 4 { n = 0; for (i = 1; i <= 4; i++) { v = $i + 0; while (v > 0) { n += v % 2; v = int(v / 2) } } print n }'
+}
+
+# Network address for the lease, e.g. 192.168.137.170 + 255.255.255.0 ->
+# 192.168.137.0.  The kernel rejects a route whose destination has host bits
+# set (fib_valid_key_len), so this cannot be skipped by passing the host CIDR.
+network_addr() {
+    echo "$1 $2" | awk '{
+        split($1, a, "."); split($2, m, ".");
+        printf "%d.%d.%d.%d\n", a[1]-(a[1]%(256-m[1])), a[2]-(a[2]%(256-m[2])), a[3]-(a[3]%(256-m[3])), a[4]-(a[4]%(256-m[4]))
+    }'
+}
+
+iface_network() {
+    addr=$(iface_ip)
+    mask=$(iface_mask)
+    [ -n "$addr" ] && [ -n "$mask" ] && network_addr "$addr" "$mask"
+}
+
+ip_rule_list() {
+    /sbin/busybox ip rule 2>&1
+}
+
+# The rule table, the main route table, and the kernel's own lookup of the
+# gateway.  `ip route get` is what turns "ping says unreachable" into either
+# "no rule consults main" or "the rule is fine and the frame is lost later".
+routing_dump() {
+    gw=$(getprop "dhcp.$IFACE.gateway" 2>/dev/null)
+    echo "vita-net: ip rule:"
+    ip_rule_list
+    echo "vita-net: ip route show:"
+    /sbin/busybox ip route show 2>&1
+    echo "vita-net: ip route get ${gw:-<no gateway>}:"
+    [ -n "$gw" ] && /sbin/busybox ip route get "$gw" 2>&1
+}
+
+# Android 5.1 netd's RouteController::Init() runs `ip rule flush`, which
+# deletes the kernel-default "from all lookup main" rule.  Its replacement
+# includes a UID-scoped "directly connected" rule built from Android's private
+# FRA 18/19 attributes; mainline reads those as FRA_FWMARK/FRA_FLOW and
+# rejects the rule with EINVAL.  Nothing then consults main, so every unicast
+# destination is unreachable even though the directly-connected route exists.
+# Put the default lookup back above netd's priorities.
+ensure_main_rule() {
+    ip_rule_list 2>/dev/null | grep -q 'lookup main' && return 0
+    for attempt in \
+        "/sbin/busybox ip rule add lookup main pref 1000" \
+        "/sbin/busybox ip rule add from all lookup main pref 1000" \
+        "/system/bin/ip rule add from all lookup main pref 1000"; do
+        tool=${attempt%% *}
+        [ -x "$tool" ] || continue
+        $attempt >> "$LOG" 2>&1
+        if ip_rule_list 2>/dev/null | grep -q 'lookup main'; then
+            log "routing: restored the main lookup rule ($attempt)"
+            return 0
+        fi
+    done
+    log "routing: could not restore the main lookup rule"
+    return 1
+}
+
+# dhcpcd cannot install the default route while main is unreachable ("add_route:
+# Network is unreachable"), so add it after the rule is back.  Both commands
+# are idempotent; the watchdog calls this again if netd restarts.
+repair_routing() {
+    ensure_main_rule || return 1
+    net=$(iface_network)
+    prefix=$(mask_prefix)
+    gw=$(getprop "dhcp.$IFACE.gateway" 2>/dev/null)
+    if [ -n "$net" ] && [ -n "$prefix" ]; then
+        /sbin/busybox ip route replace "$net/$prefix" dev "$IFACE" >> "$LOG" 2>&1 \
+            || log "routing: could not install the $net/$prefix route"
+    fi
+    if [ -n "$gw" ]; then
+        /sbin/busybox ip route replace default via "$gw" dev "$IFACE" >> "$LOG" 2>&1 \
+            || log "routing: could not install the default route via $gw"
+    fi
+    return 0
+}
+
+routing_ok() {
+    ip_rule_list 2>/dev/null | grep -q 'lookup main' || return 1
+    /sbin/busybox ip route show 2>/dev/null | grep -q '^default' || return 1
+}
+
+# stdin -> state file -> both logs, in two pieces so the "before" and "after"
+# halves of a check stay in order in the log file.
+append_state() {
+    cat > "$STATE_TMP" 2>&1
+    cat "$STATE_TMP" >> "$LOG" 2>/dev/null
+    cat "$STATE_TMP" >> "$UR0_LOG" 2>/dev/null
+    rm -f "$STATE_TMP"
+    sync_logs
+}
+
+# The OLED shows the kernel console, but /dev/console is ttyS0 (the last
+# console= on the cmdline), so Android's own shell never appears there.  Print
+# the line that matters on the framebuffer.  tty0 is not a devtmpfs device, so
+# Android's tmpfs /dev has no node for it until we create one.
+console_banner() {
+    [ -e /dev/tty0 ] || mknod /dev/tty0 c 4 0 2>/dev/null
+    [ -c /dev/tty0 ] || return 0
+    banner_ip=$(iface_ip)
+    {
+        echo
+        echo "Android 5.1.1 on PS Vita (headless)"
+        echo "Wi-Fi: ${banner_ip:-no lease} via $IFACE  gateway: $(getprop "dhcp.$IFACE.gateway" 2>/dev/null)"
+        echo "adb connect ${banner_ip:-<vita-ip>}:$(getprop service.adb.tcp.port 2>/dev/null)"
+        echo
+    } > /dev/tty0 2>/dev/null || true
+}
+
 # One compact post-lease snapshot for the cases where the link is healthy but
-# adb does not answer: address, gateway, route, ARP cache, and firewall rules.
-# The gateway ping separates "the Vita cannot receive unicast at all" from
-# "the phone blocks client-to-client traffic while the gateway is reachable".
+# adb does not answer: address, gateway, DHCP properties, policy rules, route,
+# ARP cache, firewall chains, ndc networks and the mwifiex power state.  The
+# routing state is logged twice, before and after repair_routing, because the
+# v5 failure (ENETUNREACH with a directly-connected route present) is only
+# visible in the rule table.
 adb_net_check() {
     gw=$(getprop "dhcp.$IFACE.gateway" 2>/dev/null)
     {
         echo "vita-net: adb check: inet=$(iface_ip) port=$(getprop service.adb.tcp.port 2>/dev/null)"
         echo "vita-net: gateway=${gw:-unknown}"
+        echo "vita-net: dhcp properties:"
+        getprop 2>/dev/null | grep '^\[dhcp\.' || echo "  (none)"
+        echo "vita-net: --- routing before repair ---"
+        routing_dump
+    } | append_state
+
+    repair_routing
+
+    {
+        echo "vita-net: --- routing after repair ---"
+        routing_dump
+        echo "vita-net: /proc/net/route:"
+        cat /proc/net/route 2>/dev/null
         if [ -n "$gw" ]; then
             ping_bin=/bin/ping
             [ -x "$ping_bin" ] || ping_bin=/system/bin/ping
             echo "vita-net: ping gateway $gw:"
             "$ping_bin" -c 1 -W 2 "$gw" 2>&1 | tail -n 4
+            echo "vita-net: /proc/net/arp after the ping:"
+            cat /proc/net/arp 2>/dev/null
         fi
-        echo "vita-net: /proc/net/arp:"
-        cat /proc/net/arp 2>/dev/null
-        echo "vita-net: /proc/net/route:"
-        cat /proc/net/route 2>/dev/null
         echo "vita-net: iptables -S INPUT:"
         /system/bin/iptables -S INPUT 2>&1
+        echo "vita-net: iptables -S fw_INPUT:"
+        /system/bin/iptables -S fw_INPUT 2>&1
+        echo "vita-net: iptables -S bw_INPUT:"
+        /system/bin/iptables -S bw_INPUT 2>&1
+        echo "vita-net: ndc network list:"
+        /system/bin/ndc network list 2>&1
+        echo "vita-net: --- mwifiex power state ---"
+        grep -E 'ps_mode|ps_state|deep_sleep|sleep_params' \
+            "/sys/kernel/debug/mwifiex/$IFACE/debug" 2>/dev/null \
+            || echo "  (no debugfs entry)"
         echo "vita-net: --- end adb check ---"
-    } > "$STATE_TMP" 2>&1
-    cat "$STATE_TMP" >> "$LOG" 2>/dev/null
-    cat "$STATE_TMP" >> "$UR0_LOG" 2>/dev/null
-    rm -f "$STATE_TMP"
-    sync_logs
+    } | append_state
 }
 
 # adbd is started by Android init before Wi-Fi exists.  If its listener is
@@ -276,8 +433,13 @@ dhcp_once() {
         if have_lease; then
             log "DHCP lease on $IFACE after ${n}s"
             state_block
+            # netd flushed the policy rules before dhcpcd ran, so the default
+            # route could not be installed and even the on-link subnet is
+            # unreachable until the main lookup is restored.
+            repair_routing
             ensure_adb
             adb_net_check
+            console_banner
             return 0
         fi
         if [ $((n % 10)) -eq 0 ]; then
@@ -389,6 +551,15 @@ watch_link() {
             continue
         fi
 
+        # netd only flushes the rules in RouteController::Init, so a netd
+        # restart would take the main lookup away again.  Re-check cheaply on
+        # every pass instead of waiting for the five-minute heartbeat.
+        if ! routing_ok; then
+            log "watchdog: policy routing lost; repairing"
+            repair_routing
+            console_banner
+        fi
+
         # One heartbeat every five minutes is enough to prove the link is
         # still alive without filling ur0 with duplicate state blocks.  Repeat
         # the adb listener check here too, so a listener that died after the
@@ -396,6 +567,7 @@ watch_link() {
         if [ $((now - last_sync)) -ge 300 ]; then
             log "watchdog: link healthy (uptime ${now}s, $(/sbin/busybox ifconfig "$IFACE" 2>/dev/null | grep 'inet addr:' | sed 's/^[[:space:]]*//'))"
             ensure_adb
+            console_banner
             sync_wpa_log
             last_sync=$now
         fi
@@ -452,7 +624,7 @@ mkdir -p "$UR0" 2>/dev/null
 
 : > "$LOG"
 : > "$UR0_LOG" 2>/dev/null
-log "starting v5 (bt off, disable_scan_offload, adb listener check, watchdog)"
+log "starting v6 (main-lookup rule repair, routing dumps, console banner, watchdog)"
 log "adbd tcp port: $(getprop service.adb.tcp.port 2>/dev/null)"
 
 if [ ! -f "$CONF" ]; then

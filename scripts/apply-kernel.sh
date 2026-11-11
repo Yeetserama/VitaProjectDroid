@@ -170,7 +170,7 @@ fdtput -t s "$OUT/vita-selinux-disabled.dtb" /chosen bootargs \
     echo "built: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "toolchain: $("${CROSS_COMPILE}gcc" --version | head -n 1)"
     echo "binder ABI: 32-bit (protocol 7)"
-    echo "wifi: v5 (disable_scan_offload=1, adb listener check, carrier-gated dhcpcd, watchdog)"
+    echo "wifi: v6 (disable_scan_offload=1, adb listener check, main-lookup rule repair, carrier-gated dhcpcd, watchdog)"
     echo "wifi ps: disabled (CONFIG_CFG80211_DEFAULT_PS is not set)"
     echo "bt: Marvell SD8787 SDIO transport disabled (shares firmware with mwifiex)"
     echo "initramfs bytes: $(stat -c %s "$OUT/initramfs.cpio" 2>/dev/null || wc -c < "$OUT/initramfs.cpio")"

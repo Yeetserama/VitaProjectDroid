@@ -15,6 +15,10 @@
 # whether adbd is actually listening on its TCP port, and removes the
 # status-0 "untracked pid" lines that Android init emits for every orphaned
 # helper.  Non-zero exits are kept: those are real failures.
+#
+# v6 adds the policy rule table and the main route table, because netd can
+# flush the "lookup main" rule and leave the link up but unicast unreachable,
+# plus the mwifiex power-save counters.
 
 PATH=/bin:/sbin:/system/bin:/system/xbin
 export PATH
@@ -62,6 +66,12 @@ snapshot() {
             echo "$iface: operstate=$(cat "/sys/class/net/$iface/operstate" 2>/dev/null) carrier=$(cat "/sys/class/net/$iface/carrier" 2>/dev/null) flags=$(cat "/sys/class/net/$iface/flags" 2>/dev/null)"
             ifconfig "$iface" 2>&1
         done
+        echo "--- routing ---"
+        ip rule 2>&1
+        ip route show 2>&1 | head -n 20
+        echo "--- mwifiex ps ---"
+        grep -E 'ps_mode|ps_state|deep_sleep' /sys/kernel/debug/mwifiex/mlan0/debug 2>/dev/null \
+            || echo "  (none)"
         echo "--- logcat (last 200 lines) ---"
         timeout 5 logcat -d -v threadtime -t 200 2>/dev/null
         echo "--- init reaping (status-0 lines removed from dmesg below) ---"
