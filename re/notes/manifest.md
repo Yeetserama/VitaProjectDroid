@@ -1,12 +1,28 @@
 # Firmware dump manifest
 
-Record one row per module. Do not commit the module itself.
+Record one row per captured file. Do not commit the module or ELF itself.
 
-| Module | VitaOS path | Firmware | Size | SHA-256 | Notes |
-| --- | --- | --- | --- | --- | --- |
-| `SceAudio` | TBD | 3.65 | | | |
-| `SceAudioForDriver` | TBD | 3.65 | | | |
-| `SceGpuEs4` | TBD | 3.65 | | | |
-| `SceGpuEs4ForDriver` | TBD | 3.65 | | | |
+Firmware: 3.65 (HENkaku/Enso), PCH-1000.
+Capture method: FAGDec on the console, output ELF.
+Steps: [`docs/dumping-vita-modules.md`](../../docs/dumping-vita-modules.md).
+
+| File | VitaOS path | Module | Bytes | SHA-256 | Magic | Notes |
+| --- | --- | --- | ---: | --- | --- | --- |
+| `audio.skprx.elf` | `os0:kd/audio.skprx` | `SceAudio` | | | | libraries `SceAudio`, `SceAudioForDriver` |
+| `gpu_es4.skprx.elf` | `os0:kd/gpu_es4.skprx` | `SceGpuEs4` | | | | libraries `SceGpuEs4ForUser`, `SceGpuEs4ForDriver` |
+| `gpuinit_es4.skprx.elf` | `os0:kd/gpuinit_es4.skprx` | GPU init helper | | | | optional; capture if present |
+| `libgpu_es4.suprx.elf` | `vs0:sys/external/libgpu_es4.suprx` | user GPU library | | | | optional |
 
 Status: no dump captured yet. The console is currently off/unreachable.
+
+## Raw SELF hashes (optional but useful)
+
+If the encrypted files are kept, record them here too. They are not needed for
+Ghidra but confirm that the same input produced the ELF.
+
+| File | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `audio.skprx` | | |
+| `gpu_es4.skprx` | | |
+| `gpuinit_es4.skprx` | | |
+| `libgpu_es4.suprx` | | |

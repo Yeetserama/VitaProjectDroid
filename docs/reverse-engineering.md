@@ -116,12 +116,12 @@ Rules:
 
 Blocked on the console being available; desk research can continue offline.
 
-1. Locate the loaded `SceAudio`, `SceAudioForDriver`, `SceGpuEs4` and
-   `SceGpuEs4ForDriver` modules. Kernel modules live under `os0:`; user
-   libraries under `vs0:sys/external/`. Record exact paths.
-2. Dump them with VitaShell. If a file is encrypted at rest, dump the loaded
-   module from memory with a small taiHEN helper instead of trying to decrypt
-   the file.
+1. Capture the four files listed in
+   [`dumping-vita-modules.md`](dumping-vita-modules.md): the kernel modules
+   live under `os0:kd/`, the optional user GPU library under
+   `vs0:sys/external/`.
+2. Decrypt them with FAGDec on the console. If a module cannot be decrypted,
+   dump the loaded module from memory with a small taiHEN helper instead.
 3. Record firmware version, module version, size and SHA-256 in
    `re/notes/manifest.md`. Keep the binaries in `re/dumps/`.
 4. Create a Ghidra project, import the ELFs, and apply the NID/name list from
