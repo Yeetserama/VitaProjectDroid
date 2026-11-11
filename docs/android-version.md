@@ -144,9 +144,79 @@ in their `init.<hardware>.rc`. `ZygoteInit.preloadResources()` calls
 immediately and zygote dies. This also explains why the full, truncated, and
 empty `preloaded-classes` lists all failed identically.
 
-`init.vita.rc` now exports `EXTERNAL_STORAGE=/storage/sdcard0` in `on init`,
-matching a device with physical external storage. Running the probe with that
-variable set makes the complete `preloadResources()` prologue succeed.
+`init.vita.rc` now exports `EXTERNAL_STORAGE` in `on init`. Running the probe
+with that variable set makes the complete `preloadResources()` prologue
+succeed. The value is not arbitrary: it must match the image's
+`storage_list.xml`. This SDK image declares exactly one fixed volume:
+
+```
+got storage path: /storage/sdcard description: USB storage primary: true
+                  removable: false emulated: false
+```
+
+With `/storage/sdcard0`, `Environment.getStorageVolume()` finds no matching
+volume and throws `IllegalArgumentException`. `MountService$3.run()` calls
+`PackageManagerService.scanAvailableAsecs()` immediately after vold connects,
+so `system_server` dies on every boot with:
+
+```
+FATAL EXCEPTION IN SYSTEM PROCESS: MountService#onDaemonConnected
+java.lang.IllegalArgumentException: Failed to find storage device at /storage/sdcard0
+    at android.os.Environment.isExternalStorageEmulated(Environment.java:791)
+```
+
+With `/storage/sdcard` the lookup succeeds, `system_server` survives, and
+`sys.boot_completed=1` is reached.
+
+The volume still reports `unmounted` because `fstab.vita` has no vold-managed
+backing device for it. The home screen does not need external storage; apps
+that require a mounted card (downloads, camera) will not work until a real
+volume is provided. Do **not** point vold at `/dev/block/loop1`; that would
+mount the userdata filesystem a second time.
+
+### SurfaceFlinger service registration
+
+`servicemanager` 5.1 does not reject a duplicate service name. When a second
+process registers an existing name it logs `ALREADY REGISTERED, OVERRIDE`,
+replaces the handle, and clears it when that owner dies:
+
+```c
+si = find_svc(s, len);
+if (si) {
+    if (si->handle) {
+        ALOGE("add_service('%s',%x) uid=%d - ALREADY REGISTERED, OVERRIDE\n", ...);
+        svcinfo_death(bs, si);
+    }
+    si->handle = handle;
+}
+...
+void svcinfo_death(struct binder_state *bs, void *ptr) {
+    if (si->handle) {
+        binder_release(bs, si->handle);
+        si->handle = 0;
+    }
+}
+```
+
+`SVC_MGR_LIST_SERVICES` returns every name in the list regardless of whether
+its handle is zero, so `service list` still prints `SurfaceFlinger: []` while
+`getService()` returns null. The real SurfaceFlinger stays alive but
+unregistered; every new client blocks in `ComposerService::connectLocked()` →
+`getService<ISurfaceComposer>()` and apps ANR. The duplicate also calls
+`startBootAnim()`, which is why the boot logo flashes.
+
+The v0.2 bring-up created such duplicates from the host. Passing a shell
+pipeline through `adb shell` from PowerShell can drop the inner quotes:
+`adb shell 'ps | grep -E "zygote|surfaceflinger"'` can arrive as
+`ps | grep -E zygote | surfaceflinger`, which **executes** the last word as a
+command. The duplicate then runs as root, overrides the real service, and is
+killed by SIGHUP when the adb session closes. Push a script and run it, or
+pull `ps` output and filter on the host.
+
+Recovery does not need a reboot: restart the real SurfaceFlinger
+(`stop surfaceflinger; sleep 3; start surfaceflinger`). Its `onrestart restart
+zygote` restarts the framework with it, and the new SF registers successfully
+because the stale entry has a zero handle.
 
 ### Low-RAM properties
 

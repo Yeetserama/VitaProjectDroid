@@ -12,7 +12,13 @@ on init
     # Without the variable, Debug fails to initialise, and because
     # ZygoteInit.preloadResources() calls Debug.startAllocCounting() first,
     # zygote dies with ExceptionInInitializerError before system_server starts.
-    export EXTERNAL_STORAGE /storage/sdcard0
+    #
+    # The value must match the image's storage_list.xml exactly.  This SDK
+    # image declares a single fixed "USB storage" volume at /storage/sdcard,
+    # so any other path (notably /storage/sdcard0) makes
+    # Environment.getStorageVolume() throw and MountService kills system_server
+    # in onDaemonConnected -> PackageManagerService.scanAvailableAsecs().
+    export EXTERNAL_STORAGE /storage/sdcard
 
     # SELinux and binder are set up by init itself.  debugfs is not mounted by
     # stock Android; mount it here for tracing and sw_sync diagnostics.
@@ -50,6 +56,8 @@ on boot
 
     # Headless bring-up: keep the heavy framework stopped until explicitly
     # requested.  `start` on the vita.ui trigger clears SVC_DISABLED again.
+    # SurfaceFlinger is gated too so a headless boot does not run the boot
+    # animation forever; the UI trigger starts it before zygote.
     stop zygote
     stop surfaceflinger
     stop media
@@ -68,10 +76,11 @@ on boot
     write /proc/sys/vm/swappiness 100
 
 # `adb shell setprop vita.ui 1` (or touch ur0:/android/ui and reboot) turns the
-# framework on after the core services are up.
+# framework on after the core services are up.  Start SurfaceFlinger first so
+# system_server finds the composer as soon as WindowManagerService starts.
 on property:vita.ui=1
-    start zygote
     start surfaceflinger
+    start zygote
 
 # Keep a synced kernel-log snapshot on ur0.  Android init sets panic_on_oops=1,
 # so a kernel oops or a critical-service crash loop can reset the Vita at any

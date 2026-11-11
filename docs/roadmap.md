@@ -104,18 +104,30 @@ simple Android app can be navigated with the Vita controls.
 
 ## Phase 5 - Display and graphics
 
-**Status: legacy software renderer presents; zygote blocks the launcher.** The
-self-contained `glbench` bundle reached about **30 fps effective** at 960x544
-with Mesa softpipe and the fb0 present copy, and the color order was correct.
-Inside Android, `ro.kernel.qemu=1` plus `ro.kernel.qemu.gles=0` makes
+**Status: framework reaches `sys.boot_completed=1`; app testing in progress.**
+The self-contained `glbench` bundle reached about **30 fps effective** at
+960x544 with Mesa softpipe and the fb0 present copy, and the color order was
+correct. Inside Android, `ro.kernel.qemu=1` plus `ro.kernel.qemu.gles=0` makes
 SurfaceFlinger fall back to `libGLES_android.so` (PixelFlinger 1.4, GLES 1.x),
 and the 5.1 boot animation renders on the panel. Porting Mesa to bionic remains
-the route to GLES 2.0 and HWUI, but it is no longer required to get the home
-screen up. Launcher bring-up was blocked by a zygote
-`ExceptionInInitializerError` in `preloadResources()`: `android.os.Debug`
-requires the `EXTERNAL_STORAGE` environment variable, which the SDK ramdisk
-never exports. `init.vita.rc` now exports it; the next boot tests
-`system_server` and the launcher.
+the route to GLES 2.0 and HWUI, but it is not required for the home screen.
+
+Two framework blockers are fixed:
+
+- Zygote died in `preloadResources()` because `android.os.Debug` requires
+  `EXTERNAL_STORAGE`, which the SDK ramdisk never exports. `init.vita.rc` now
+  exports it, and the value must be `/storage/sdcard` to match the image's
+  `storage_list.xml`; `/storage/sdcard0` makes `MountService` kill
+  `system_server` in `onDaemonConnected`.
+- A stray root `surfaceflinger` from a host adb pipeline overrode the
+  servicemanager entry. When it exited, the real SF stayed alive but
+  unregistered, so new clients blocked in
+  `ComposerService::connectLocked()` and apps ANR'd. See
+  [android-version.md](android-version.md#surfaceflinger-service-registration).
+
+`Launcher2` and SystemUI now start. Remaining work: verify Settings/Browser
+survive normal use, capture the home screen, and decide whether to provide a
+vold-backed external volume (currently `unmounted`).
 
 **Goal:** SurfaceFlinger presents frames and a trivial GLES 2.0 app runs.
 
