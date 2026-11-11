@@ -1,6 +1,10 @@
 # Software GLES2 performance gate (`glbench`)
 
-Status: build automation ready, waiting for a first run on hardware.
+Status: **gate passed on hardware.** On 2026-11-11 the bundle rendered
+correctly on a PCH-1000 and reported about **30 fps effective** at 960x544 on
+the `ui` scene, with the fb0 test pattern in the right color order. That is the
+comfort target, not just the 20 fps pass. The run was not captured to a log;
+keep the JSON output from the next run for the record.
 
 This is the first v0.2 milestone. Before porting Mesa to bionic or writing a
 SurfaceFlinger presenter, we need one number from the real console: **how fast
@@ -50,6 +54,24 @@ verdict's present term.
 
 The gate is **20 fps effective**. That is the minimum for a responsive-feeling
 launcher at native resolution. 30 fps is the comfort target.
+
+### First hardware run
+
+- Date: 2026-11-11, PCH-1000 (OLED).
+- Renderer: the bundled Mesa 24.0.9 softpipe, 960x544, `ui` scene.
+- Result: about **30 fps effective** including the fb0 present copy.
+- The presented test pattern had the correct color order, so `--fb-format rgba`
+  (the default) matches this panel path.
+- No log was saved. The exact per-scene times still need a rerun with `--json`:
+
+```sh
+adb shell 'cd /data/glbench && sh run.sh --json > result.json'
+adb pull /data/glbench/result.json
+```
+
+This passes the gate at the comfort target, so the v0.2 renderer decision is
+settled: stay with Mesa softpipe at 960x544 and do not lower the internal
+resolution.
 
 ### Framebuffer byte order
 
