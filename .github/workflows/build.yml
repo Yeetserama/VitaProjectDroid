@@ -2,7 +2,7 @@ name: build
 
 on:
   push:
-    branches: [ main, master, android-4.2 ]
+    branches: [ main, master, android-4.2, android-2.2 ]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -14,6 +14,7 @@ on:
         options:
           - '5.1'
           - '4.2'
+          - '2.2'
           - 'both'
 
 permissions:
@@ -21,7 +22,7 @@ permissions:
 
 jobs:
   boot-package-5-1:
-    if: github.event.inputs.android_version == '5.1' || github.event.inputs.android_version == 'both' || github.event.inputs.android_version == '' || (github.event_name != 'workflow_dispatch' && github.ref != 'refs/heads/android-4.2')
+    if: github.event_name == 'workflow_dispatch' && (github.event.inputs.android_version == '5.1' || github.event.inputs.android_version == 'both') || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
     runs-on: ubuntu-24.04
     timeout-minutes: 75
 
@@ -121,7 +122,7 @@ jobs:
             build/out/build-info.txt
 
   boot-package-4-2:
-    if: github.event.inputs.android_version == '4.2' || github.event.inputs.android_version == 'both' || (github.event_name == 'push' && github.ref == 'refs/heads/android-4.2')
+    if: github.event_name == 'workflow_dispatch' && (github.event.inputs.android_version == '4.2' || github.event.inputs.android_version == 'both') || (github.event_name == 'push' && github.ref == 'refs/heads/android-4.2')
     runs-on: ubuntu-24.04
     timeout-minutes: 75
 
@@ -232,3 +233,117 @@ jobs:
             build/out/initramfs.cpio-4.2
             build/out/SHA256SUMS-4.2
             build/out/build-info.txt-4.2
+
+  boot-package-2-2:
+    if: github.event_name == 'workflow_dispatch' && (github.event.inputs.android_version == '2.2' || github.event.inputs.android_version == 'both') || (github.event_name == 'push' && github.ref == 'refs/heads/android-2.2')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Prefer public DNS
+        run: |
+          if [ -f /etc/resolv.conf ]; then
+            sudo cp /etc/resolv.conf /etc/resolv.conf.platform
+            {
+              echo 'nameserver 1.1.1.1'
+              echo 'nameserver 8.8.8.8'
+              echo 'options timeout:2 attempts:2'
+              cat /etc/resolv.conf.platform
+            } > /tmp/resolv.conf.new
+            sudo cp /tmp/resolv.conf.new /etc/resolv.conf \
+              || echo "could not rewrite /etc/resolv.conf; keeping the platform resolver"
+          fi
+          getent hosts archive.ubuntu.com || true
+
+      - name: Install build dependencies
+        timeout-minutes: 20
+        run: |
+          apt_opts=(
+            -o Acquire::ForceIPv4=true
+            -o Acquire::Retries=5
+            -o Acquire::http::Timeout=20
+            -o Acquire::https::Timeout=20
+          )
+          packages=(
+            bc
+            bison
+            ca-certificates
+            device-tree-compiler
+            flex
+            gcc-arm-linux-gnueabihf
+            libelf-dev
+            libssl-dev
+            python3
+            xz-utils
+          )
+          for attempt in 1 2 3; do
+            echo "apt attempt $attempt"
+            if sudo apt-get "${apt_opts[@]}" update \
+               && sudo apt-get "${apt_opts[@]}" install \
+                    -y --no-install-recommends "${packages[@]}"; then
+              exit 0
+            fi
+            echo "apt attempt $attempt failed; retrying"
+            sleep $((attempt * 10))
+          done
+          echo "could not install build dependencies after 3 attempts" >&2
+          exit 1
+
+      - name: Cache kernel tarball
+        uses: actions/cache@v4
+        with:
+          path: build/downloads
+          key: linux-vita-a33b819fd7174f60b1d5bcb613de565b3f046687
+
+      - name: Download Android 2.2 SDK images
+        run: |
+          # Android 2.2 (API 8) images may not be available via sdkmanager anymore.
+          # This step will attempt to download but may fail - the ramdisk-2.2.img
+          # should be pre-provided in prebuilt/ for CI to work reliably.
+          SDK_URL="https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+          curl -L -o /tmp/cmdline-tools.zip "$SDK_URL" 2>/dev/null || true
+          mkdir -p $HOME/android-sdk/cmdline-tools
+          unzip -q /tmp/cmdline-tools.zip -d $HOME/android-sdk/cmdline-tools 2>/dev/null || true
+          mv $HOME/android-sdk/cmdline-tools/cmdline-tools $HOME/android-sdk/cmdline-tools/latest 2>/dev/null || true
+          export ANDROID_HOME=$HOME/android-sdk
+          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "system-images;android-8;default;armeabi-v7a" 2>/dev/null || echo "Android 2.2 SDK image not available via sdkmanager (expected)"
+
+      - name: Build Android 2.2 boot package
+        run: |
+          set +e
+          ANDROID_VERSION=2.2 bash scripts/build.sh 2>&1 | tee build-2.2.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            {
+              echo "## Build failed (exit $status)"
+              echo '```'
+              tail -n 100 build-2.2.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            message=$(tail -n 60 build-2.2.log | awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }' | cut -c1-60000)
+            echo "::error title=Build boot package failed::$message"
+            exit "$status"
+          fi
+
+      - name: Show build information (2.2)
+        run: |
+          cat build/out/build-info.txt-2.2
+          cat build/out/SHA256SUMS-2.2
+
+      - name: Upload Android 2.2 boot package
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-2.2-boot
+          if-no-files-found: error
+          path: |
+            build/out/zImage-2.2
+            build/out/vita.dtb-2.2
+            build/out/vita1000.dtb-2.2
+            build/out/initramfs.cpio-2.2
+            build/out/SHA256SUMS-2.2
+            build/out/build-info.txt-2.2
