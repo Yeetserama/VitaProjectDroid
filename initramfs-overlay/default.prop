@@ -27,6 +27,14 @@ ro.kernel.qemu.gles=0
 # instead of the 960x544 dp tablet layout that the unset default produces.
 ro.sf.lcd_density=240
 
+# ART heap sizing. The SDK image has no dalvik.vm.heap* properties, so ART
+# falls back to its built-in 4m start / 16m maximum, which is far too small
+# for system_server, let alone an app. These are the usual values for a
+# 512 MB device: 96 MB is the per-app growth limit, 192 MB the large-heap cap.
+dalvik.vm.heapstartsize=8m
+dalvik.vm.heapgrowthlimit=96m
+dalvik.vm.heapsize=192m
+
 dalvik.vm.dex2oat-Xms=64m
 dalvik.vm.dex2oat-Xmx=512m
 dalvik.vm.image-dex2oat-Xms=64m

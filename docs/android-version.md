@@ -149,23 +149,21 @@ variable set makes the complete `preloadResources()` prologue succeed.
 
 ### Low-RAM properties
 
-If needed, these can be applied through the initramfs `default.prop` where the
-property is not `ro.`-locked, or by remounting `/system` read-write and editing
-`build.prop` for experiments:
+The SDK image ships no `dalvik.vm.heap*` properties at all, so ART used its
+built-in 4 MB start / 16 MB maximum defaults and every process, including
+`system_server`, would run out of heap soon after start. `default.prop` now
+sets the usual 512 MB values:
 
 ```properties
-ro.config.low_ram=true
-ro.config.max_starting_bg=4
-ro.sf.lcd_density=240
 dalvik.vm.heapstartsize=8m
 dalvik.vm.heapgrowthlimit=96m
 dalvik.vm.heapsize=192m
-dalvik.vm.dex2oat-filter=interpret-only
 ```
 
-`interpret-only` reduces first-boot compilation time and disk use, at the cost
-of slower app execution. Do not change these until the first boot shows actual
-memory or dex2oat pressure.
+`ro.config.low_ram=true` and `dalvik.vm.dex2oat-filter=interpret-only` are not
+set yet. Add them only if the first boot shows memory pressure or dex2oat
+takes unreasonably long; interpret-only trades app speed for faster first
+boot.
 
 ### What to leave out
 
