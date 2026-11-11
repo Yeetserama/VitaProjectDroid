@@ -20,7 +20,7 @@ permissions:
   contents: read
 
 jobs:
-  boot-package-5.1:
+  boot-package-5-1:
     if: github.event.inputs.android_version == '5.1' || github.event.inputs.android_version == 'both' || github.event.inputs.android_version == '' || github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 75
@@ -120,7 +120,7 @@ jobs:
             build/out/SHA256SUMS
             build/out/build-info.txt
 
-  boot-package-4.2:
+  boot-package-4-2:
     if: github.event.inputs.android_version == '4.2' || github.event.inputs.android_version == 'both'
     runs-on: ubuntu-24.04
     timeout-minutes: 75
