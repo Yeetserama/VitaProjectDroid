@@ -166,6 +166,24 @@ This is the real RE step. Work from both ends:
 - Linux: once a candidate base is known, map it read-only and compare reset
   values against the VitaOS dump before writing anything.
 
+Static first pass: [`re/scripts/scan-mmio.py`](../re/scripts/scan-mmio.py)
+looks for 4-byte values in the Vita peripheral window
+(`0xE0000000-0xE3FFFFFF`) and resolves ARM-mode `ldr rX, [pc, #imm]`
+literal-pool loads. It scans non-executable sections by default and groups
+hits by page:
+
+```sh
+python re/scripts/scan-mmio.py re/dumps/fw365/audio.skprx.elf
+python re/scripts/scan-mmio.py --include-text audio.skprx.elf
+python re/scripts/scan-mmio.py --self-test
+```
+
+A hit is only a candidate; trace it to a function in Ghidra before treating
+it as a register base. `--include-text` adds raw code words and is noisy
+because ARM opcodes share the `0xE...` encoding space. The scanner also
+accepts `--range` for other windows and `--json` for scripted comparison
+between modules.
+
 Deliverable: `re/notes/audio-registers.md` with base, register map, DMA
 descriptor layout, IRQ and init sequence.
 
