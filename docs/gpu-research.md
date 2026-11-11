@@ -148,11 +148,14 @@ Success odds are low and the timeline is months. Do not block v0.2 on it.
 
 ## Recommendation
 
-- **v0.2 UI path**: software GLES2. The first step is the performance gate in
-  [`glbench.md`](glbench.md): a self-contained armhf Mesa softpipe benchmark at
-  960x544 on the real console. If it passes, port Mesa to bionic and wire
-  EGL/gralloc/`fb_post`; if it fails, try llvmpipe/SwiftShader or a lower
-  internal resolution before committing to the framework.
+- **v0.2 UI path**: the image's own GLES 1.x software renderer. SurfaceFlinger
+  already presents through `libGLES_android.so` (PixelFlinger 1.4) when
+  `ro.kernel.qemu=1` and `ro.kernel.qemu.gles=0` are set; this is enough for the
+  2D `Launcher2` home screen. The `glbench` performance gate in
+  [`glbench.md`](glbench.md) already passed at about 30 fps effective at
+  960x544 with Mesa softpipe. Porting Mesa to bionic is the later step for
+  GLES 2.0/HWUI and for replacing PixelFlinger; llvmpipe/SwiftShader or a lower
+  internal resolution remain fallbacks if softpipe is too slow in the framework.
 - **Fallback**: native fbdev shell + touch (no framework). LinuxOnVita already
   proves fb0, touch and input work; this gives a usable UI without Android
   apps.

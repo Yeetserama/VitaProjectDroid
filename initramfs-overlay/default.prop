@@ -12,6 +12,21 @@ ro.adb.secure=0
 persist.sys.usb.config=adb
 service.adb.tcp.port=5555
 
+# The SDK image only ships the emulator EGL/GLES drivers. The QEMU one opens a
+# host pipe that does not exist on the Vita, so SurfaceFlinger aborts with
+# "no suitable EGLConfig found". Reporting "emulator without GPU emulation"
+# makes Android 5.1's libEGL load /system/lib/egl/libGLES_android.so, the
+# bundled software renderer (libpixelflinger + libETC1). It is GLES1-only,
+# which is enough for SurfaceFlinger 5.1's GLES11RenderEngine and Launcher2.
+# This is a stopgap until a real GPU driver exists; it does not make GLES2
+# apps work.
+ro.kernel.qemu=1
+ro.kernel.qemu.gles=0
+
+# Native panel is 960x544. Density 240 gives a 640x363 dp phone-like layout
+# instead of the 960x544 dp tablet layout that the unset default produces.
+ro.sf.lcd_density=240
+
 dalvik.vm.dex2oat-Xms=64m
 dalvik.vm.dex2oat-Xmx=512m
 dalvik.vm.image-dex2oat-Xms=64m

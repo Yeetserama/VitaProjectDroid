@@ -84,12 +84,68 @@ The generic image is not tuned for the Vita. Expect:
 
 - no low-RAM properties by default;
 - no HWC, so the display path needs work;
-- no software GLES 2.0, so SurfaceFlinger cannot start normally;
+- no software GLES 2.0; the only renderer is `libGLES_android.so`
+  (PixelFlinger, GLES 1.x), which SurfaceFlinger can use through the emulator
+  fallback described below;
 - generic dhcpcd/netd assumptions, including the missing `xt_qtaguid`;
 - a generic `build.prop` on a read-only filesystem.
 
 For the first headless boot, none of those block `adbd`. They become the next
 phases after Android init and networking are proven.
+
+### Software renderer fallback
+
+SurfaceFlinger does not need a GLES 2.0 driver to present frames. If the
+emulator properties are set before `libEGL` loads, it selects the legacy
+software path and uses `GLES10RenderEngine` with
+`/system/lib/egl/libGLES_android.so`:
+
+```properties
+ro.kernel.qemu=1
+ro.kernel.qemu.gles=0
+ro.sf.lcd_density=240
+```
+
+Verified on hardware: SurfaceFlinger reports `Android PixelFlinger 1.4`,
+`OpenGL ES-CM 1.0`, and `GL_MAX_TEXTURE_SIZE = 4096`, and it draws the 5.1 boot
+animation on the 960x544 panel. `libGLES_android.so` supplies EGL and GLES 1.x
+only, so GLES 2.0 apps and HWUI still cannot run. The `Launcher2` home screen is
+2D and remains the v0.2 target.
+
+The two `ro.kernel.qemu*` properties must be present before the process that
+loads `libEGL` starts. The v0.2 boot kit now ships them in `default.prop`.
+`adb shell setprop` still works once for experiments while they are unset
+(root); after that they are read-only until reboot, which made the runtime
+diagnosis above possible.
+
+### Framework boot blocker
+
+With the renderer working, SurfaceFlinger and the boot animation run, but zygote
+originally exited during `preloadResources()`, before `system_server` started.
+The failure was an `ExceptionInInitializerError` with no Java stack trace in
+logcat. An on-device `app_process` probe reproduced it:
+
+```
+java.lang.NullPointerException: Attempt to invoke virtual method
+'char[] java.lang.String.toCharArray()' on a null object reference
+    at java.io.File.fixSlashes(File.java:185)
+    at java.io.File.<init>(File.java:134)
+    at android.os.Environment.getLegacyExternalStorageDirectory(Environment.java:397)
+    at android.os.Debug.<clinit>(Debug.java:96)
+```
+
+`Debug.<clinit>` builds its default trace path from
+`Environment.getLegacyExternalStorageDirectory()`, which is
+`new File(System.getenv("EXTERNAL_STORAGE"))` with no null check. The SDK
+ramdisk's `init.environ.rc` never exports `EXTERNAL_STORAGE`; stock devices do it
+in their `init.<hardware>.rc`. `ZygoteInit.preloadResources()` calls
+`Debug.startAllocCounting()` before anything else, so the class initializer runs
+immediately and zygote dies. This also explains why the full, truncated, and
+empty `preloaded-classes` lists all failed identically.
+
+`init.vita.rc` now exports `EXTERNAL_STORAGE=/storage/sdcard0` in `on init`,
+matching a device with physical external storage. Running the probe with that
+variable set makes the complete `preloadResources()` prologue succeed.
 
 ### Low-RAM properties
 

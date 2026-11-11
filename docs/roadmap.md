@@ -104,11 +104,18 @@ simple Android app can be navigated with the Vita controls.
 
 ## Phase 5 - Display and graphics
 
-**Status: software GLES2 gate passed; framework integration next.** The
+**Status: legacy software renderer presents; zygote blocks the launcher.** The
 self-contained `glbench` bundle reached about **30 fps effective** at 960x544
 with Mesa softpipe and the fb0 present copy, and the color order was correct.
-That is the comfort target. The remaining work is the EGL/GLES and presenter
-glue inside Android.
+Inside Android, `ro.kernel.qemu=1` plus `ro.kernel.qemu.gles=0` makes
+SurfaceFlinger fall back to `libGLES_android.so` (PixelFlinger 1.4, GLES 1.x),
+and the 5.1 boot animation renders on the panel. Porting Mesa to bionic remains
+the route to GLES 2.0 and HWUI, but it is no longer required to get the home
+screen up. Launcher bring-up was blocked by a zygote
+`ExceptionInInitializerError` in `preloadResources()`: `android.os.Debug`
+requires the `EXTERNAL_STORAGE` environment variable, which the SDK ramdisk
+never exports. `init.vita.rc` now exports it; the next boot tests
+`system_server` and the launcher.
 
 **Goal:** SurfaceFlinger presents frames and a trivial GLES 2.0 app runs.
 

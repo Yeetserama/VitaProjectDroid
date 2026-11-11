@@ -5,6 +5,15 @@
 # with androidboot.hardware=vita on the kernel command line.
 
 on init
+    # Stock devices export this from init.<hardware>.rc; the SDK ramdisk's
+    # init.environ.rc does not.  android.os.Debug.<clinit> builds its default
+    # trace path with Environment.getLegacyExternalStorageDirectory(), which
+    # calls new File(System.getenv("EXTERNAL_STORAGE")) without a null check.
+    # Without the variable, Debug fails to initialise, and because
+    # ZygoteInit.preloadResources() calls Debug.startAllocCounting() first,
+    # zygote dies with ExceptionInInitializerError before system_server starts.
+    export EXTERNAL_STORAGE /storage/sdcard0
+
     # SELinux and binder are set up by init itself.  debugfs is not mounted by
     # stock Android; mount it here for tracing and sw_sync diagnostics.
     mkdir /sys/kernel/debug 0755 root root
