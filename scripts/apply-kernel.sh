@@ -198,8 +198,12 @@ echo "==> collecting artifacts"
 VERSION_SUFFIX=""
 case "$ANDROID_VERSION" in
     4.2) VERSION_SUFFIX="-4.2" ;;
+    2.2) VERSION_SUFFIX="-2.2" ;;
     5.1) VERSION_SUFFIX="" ;;
+    *) echo "apply-kernel: unknown Android version: $ANDROID_VERSION" >&2; exit 1 ;;
 esac
+
+echo "ANDROID_VERSION=$ANDROID_VERSION, VERSION_SUFFIX=$VERSION_SUFFIX"
 
 cp "$ZIMAGE" "$OUT/zImage${VERSION_SUFFIX}"
 cp "$DTB" "$OUT/vita1000.dtb${VERSION_SUFFIX}"
@@ -208,9 +212,13 @@ cp "$INITRAMFS" "$OUT/initramfs.cpio${VERSION_SUFFIX}"
 
 command -v fdtput >/dev/null 2>&1 || die "fdtput not found (install device-tree-compiler)"
 fdtput -t s "$OUT/vita.dtb${VERSION_SUFFIX}" /chosen bootargs "$BOOTARGS"
-cp "$OUT/vita.dtb${VERSION_SUFFIX}" "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}"
-fdtput -t s "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /chosen bootargs \
-    "${BOOTARGS/androidboot.selinux=permissive/androidboot.selinux=disabled}"
+
+# Android 2.2 has no SELinux, so no need for selinux-disabled DTB
+if [ "$ANDROID_VERSION" != "2.2" ]; then
+    cp "$OUT/vita.dtb${VERSION_SUFFIX}" "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}"
+    fdtput -t s "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /chosen bootargs \
+        "${BOOTARGS/androidboot.selinux=permissive/androidboot.selinux=disabled}"
+fi
 
 {
     echo "kernel: incognitojam/linux_vita vita-port-6.12.0"
@@ -227,14 +235,20 @@ fdtput -t s "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /chosen bootargs \
     echo
     echo "bootargs (vita.dtb):"
     echo "$BOOTARGS"
-    echo
-    echo "bootargs (vita-selinux-disabled.dtb):"
-    echo "${BOOTARGS/androidboot.selinux=permissive/androidboot.selinux=disabled}"
+    if [ "$ANDROID_VERSION" != "2.2" ]; then
+        echo
+        echo "bootargs (vita-selinux-disabled.dtb):"
+        echo "${BOOTARGS/androidboot.selinux=permissive/androidboot.selinux=disabled}"
+    fi
 } > "$OUT/build-info.txt${VERSION_SUFFIX}"
 
 (
     cd "$OUT"
-    sha256sum zImage${VERSION_SUFFIX} vita.dtb${VERSION_SUFFIX} vita1000.dtb${VERSION_SUFFIX} vita-selinux-disabled.dtb${VERSION_SUFFIX} initramfs.cpio${VERSION_SUFFIX} > SHA256SUMS${VERSION_SUFFIX}
+    if [ "$ANDROID_VERSION" = "2.2" ]; then
+        sha256sum zImage${VERSION_SUFFIX} vita.dtb${VERSION_SUFFIX} vita1000.dtb${VERSION_SUFFIX} initramfs.cpio${VERSION_SUFFIX} > SHA256SUMS${VERSION_SUFFIX}
+    else
+        sha256sum zImage${VERSION_SUFFIX} vita.dtb${VERSION_SUFFIX} vita1000.dtb${VERSION_SUFFIX} vita-selinux-disabled.dtb${VERSION_SUFFIX} initramfs.cpio${VERSION_SUFFIX} > SHA256SUMS${VERSION_SUFFIX}
+    fi
 )
 
 echo
