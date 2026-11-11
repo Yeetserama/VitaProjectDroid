@@ -109,14 +109,15 @@ ro.sf.lcd_density=240
 Verified on hardware: SurfaceFlinger reports `Android PixelFlinger 1.4`,
 `OpenGL ES-CM 1.0`, and `GL_MAX_TEXTURE_SIZE = 4096`, and it draws the 5.1 boot
 animation on the 960x544 panel. `libGLES_android.so` supplies EGL and GLES 1.x
-only, so GLES 2.0 apps and HWUI still cannot run. The `Launcher2` home screen is
-2D and remains the v0.2 target.
+only, so GLES 2.0 apps cannot render with hardware acceleration and HWUI has to
+fall back to software drawing. The `Launcher2` home screen is 2D and remains the
+v0.2 target.
 
 The two `ro.kernel.qemu*` properties must be present before the process that
 loads `libEGL` starts. The v0.2 boot kit now ships them in `default.prop`.
 `adb shell setprop` still works once for experiments while they are unset
-(root); after that they are read-only until reboot, which made the runtime
-diagnosis above possible.
+(root); after that they are read-only until reboot, which is what made the
+runtime experiments above possible.
 
 ### Framework boot blocker
 
