@@ -1,0 +1,164 @@
+#!/bin/sh
+# Stage-1 init for Android 4.2.2 on the PlayStation Vita.
+#
+# The kernel is booted with rdinit=/init.vita.  This script:
+#   1. mounts devtmpfs/proc/sys,
+#   2. mounts the Vita's ur0 partition read-write,
+#   3. attaches the Android system/userdata ext4 images to loop devices,
+#   4. enables zram swap,
+#   5. execs Android's real /init.
+#
+# Android's own init mounts a fresh tmpfs over /dev and its own proc/sysfs
+# later; the loop associations and /mnt/ur0 mount survive that.
+
+BB=/sbin/busybox
+
+# The kernel's default PATH has no /bin/mkdir, /bin/mount, etc.  Everything
+# before the busybox applet installation must go through $BB explicitly.
+$BB mkdir -p /bin /dev /proc /sys
+$BB --install -s /bin 2>/dev/null || true
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+export PATH
+
+log() {
+    echo "init.vita: $*" >/dev/kmsg 2>/dev/null
+    echo "init.vita: $*"
+}
+
+UR0_MOUNTED=0
+
+fail() {
+    log "FATAL: $*"
+    # Leave the ring buffer on ur0 so a failure before adbd starts can be read
+    # on a PC.  The periodic mirror below would otherwise overwrite this with a
+    # later snapshot that no longer contains the reason.
+    if [ "$UR0_MOUNTED" = 1 ]; then
+        $BB dmesg > /mnt/ur0/android/boot.log 2>/dev/null
+        $BB sync
+        log "kernel log saved to ur0:/android/boot.log"
+    fi
+    log "Dropping to a busybox shell. Reboot the Vita to retry."
+    while true; do
+        /bin/sh
+        $BB sleep 1
+    done
+}
+
+wait_for() {
+    # wait_for <path> <seconds>
+    n=0
+    while [ ! -e "$1" ]; do
+        n=$((n + 1))
+        [ "$n" -gt "$2" ] && return 1
+        $BB sleep 1
+    done
+    return 0
+}
+
+log "starting"
+
+# devtmpfs must come first: the kernel gives an initramfs an empty /dev.
+$BB mount -t devtmpfs devtmpfs /dev 2>/dev/null
+[ -c /dev/null ] || fail "devtmpfs did not populate /dev"
+
+$BB mount -t proc proc /proc 2>/dev/null
+$BB mount -t sysfs sysfs /sys 2>/dev/null
+
+# The SCE partition parser exposes ur0 as partition 12 of the eMMC.
+wait_for /dev/mmcblk0p12 20 || true
+UR0=
+for dev in /dev/mmcblk0p12 /dev/mmcblk1p12 /dev/mmcblk2p12; do
+    if [ -b "$dev" ]; then
+        UR0=$dev
+        break
+    fi
+done
+[ -n "$UR0" ] || fail "ur0 block device (mmcblkXp12) not found"
+
+mkdir -p /mnt/ur0
+log "mounting $UR0 on /mnt/ur0 (rw)"
+if ! $BB mount -t exfat -o rw,noatime "$UR0" /mnt/ur0; then
+    if ! $BB mount -t vfat -o rw,noatime "$UR0" /mnt/ur0; then
+        $BB mount -o rw,noatime "$UR0" /mnt/ur0 || fail "cannot mount $UR0"
+    fi
+fi
+UR0_MOUNTED=1
+
+mkdir -p /mnt/ur0/android 2>/dev/null
+
+# The Vita has no serial port, so mirror the kernel log (Android init and its
+# services also write to /dev/kmsg) to ur0.  Take an initial snapshot here so a
+# failure before Android init still leaves a readable log.  The vita-log init
+# service takes over after /system is mounted and refreshes it every 2 s with
+# sync, which is what preserves the log across a hard reset.
+$BB dmesg > /mnt/ur0/android/boot.log 2>/dev/null
+$BB sync
+log "initial kernel log saved (ur0:/android/boot.log); vita-log takes over"
+
+# The late_start scripts are embedded in the initramfs, but Wi-Fi and logging
+# fixes are much easier to iterate on when they can be replaced from ur0.
+# Copy a readable replacement over the embedded copy before Android init
+# starts, stripping CRLF from a Windows editor.  Write to a temporary name and
+# rename, so an interrupted copy cannot leave a truncated service script.
+for f in vita-net.sh vita-log.sh vita-ui.sh; do
+    src=/mnt/ur0/android/$f
+    [ -s "$src" ] || continue
+    # Refuse anything that does not start with a shebang: an empty file, a
+    # binary, or a script saved with a UTF-8 BOM would otherwise replace a
+    # working embedded copy with something the kernel cannot execute.
+    if [ "$($BB head -c 2 "$src" 2>/dev/null)" != "#!" ]; then
+        log "ignoring $src (does not start with #!)"
+        continue
+    fi
+    if $BB tr -d '\r' < "$src" > "/$f.new" 2>/dev/null; then
+        $BB chmod 0755 "/$f.new" 2>/dev/null
+        if $BB mv -f "/$f.new" "/$f" 2>/dev/null; then
+            log "using $src instead of the embedded $f"
+        else
+            $BB rm -f "/$f.new" 2>/dev/null
+            log "cannot replace /$f; keeping the embedded copy"
+        fi
+    else
+        $BB rm -f "/$f.new" 2>/dev/null
+        log "cannot read $src; keeping the embedded $f"
+    fi
+done
+
+for img in system.img userdata.img; do
+    [ -f "/mnt/ur0/android/$img" ] || fail "missing /mnt/ur0/android/$img"
+done
+
+# Attach the images.  system.img is read-only; userdata.img is writable.
+# devtmpfs normally creates the loop nodes, but do not depend on it: the
+# loop driver's major is fixed at 7, so a manual node is safe.
+for n in 0 1; do
+    [ -e "/dev/loop$n" ] || $BB mknod "/dev/loop$n" b 7 "$n" 2>/dev/null
+    [ -e "/dev/loop$n" ] || fail "missing /dev/loop$n (CONFIG_BLK_DEV_LOOP)"
+    $BB losetup -d "/dev/loop$n" 2>/dev/null
+done
+log "attaching Android images"
+$BB losetup -r /dev/loop0 /mnt/ur0/android/system.img || fail "losetup system.img"
+$BB losetup /dev/loop1 /mnt/ur0/android/userdata.img || fail "losetup userdata.img"
+
+# zram swap: 128 MiB, lz4.  The driver is built in, so no modprobe is needed.
+if [ -e /sys/block/zram0/disksize ]; then
+    echo 134217728 > /sys/block/zram0/disksize 2>/dev/null
+    if $BB mkswap /dev/zram0 >/dev/null 2>&1; then
+        if $BB swapon /dev/zram0 2>/dev/null; then
+            log "zram0 swap enabled (128 MiB)"
+        fi
+    fi
+fi
+
+# /cache is mounted by Android init from fstab.vita (mount_all) on the first
+# boot.  An ext4 cache image can be added later by attaching it to /dev/loop2
+# and changing the fstab entry.
+
+# A modest VM tweak for a 512 MiB device with zram.
+echo 100 > /proc/sys/vm/swappiness 2>/dev/null
+
+log "handing off to /init"
+$BB sync
+PATH=/sbin:/vendor/bin:/system/sbin:/system/bin:/system/xbin
+export PATH
+exec /init

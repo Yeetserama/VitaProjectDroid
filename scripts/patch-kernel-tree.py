@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Apply the small, text-only kernel-tree changes needed by this project.
 
-The ashmem driver itself is copied into drivers/misc/ashmem by
-apply-kernel.sh; this script wires it into Kconfig/Makefile, adds the Vita DTBs
-to the ARM dts Makefile, and selects the 32-bit binder ABI.  All edits are
-idempotent.
+The ashmem, logger, and lowmemorykiller drivers are copied into
+drivers/misc/ashmem, drivers/misc/logger, drivers/misc/lowmemorykiller by
+apply-kernel.sh; this script wires them into Kconfig/Makefile, adds the Vita
+DTBs to the ARM dts Makefile, and selects the 32-bit binder ABI.  All edits
+are idempotent.
 """
 
 from __future__ import annotations
@@ -24,30 +25,92 @@ def write(path: str, text: str) -> None:
         f.write(text)
 
 
-def patch_kconfig(tree: str) -> bool:
+def patch_misc_kconfig(tree: str) -> bool:
     path = os.path.join(tree, "drivers/misc/Kconfig")
     text = read(path)
-    if 'source "drivers/misc/ashmem/Kconfig"' in text:
-        return False
+    changed = False
+    if 'source "drivers/misc/ashmem/Kconfig"' not in text:
+        lines = text.splitlines()
+        indices = [i for i, line in enumerate(lines) if line.strip() == "endmenu"]
+        if not indices:
+            raise ValueError(f"{path}: no endmenu found")
+        index = indices[-1]
+        lines.insert(index, 'source "drivers/misc/ashmem/Kconfig"')
+        text = "\n".join(lines) + "\n"
+        changed = True
 
+    if 'source "drivers/misc/logger/Kconfig"' not in text:
+        lines = text.splitlines()
+        indices = [i for i, line in enumerate(lines) if line.strip() == "endmenu"]
+        if not indices:
+            raise ValueError(f"{path}: no endmenu found")
+        index = indices[-1]
+        lines.insert(index, 'source "drivers/misc/logger/Kconfig"')
+        text = "\n".join(lines) + "\n"
+        changed = True
+
+    if 'source "drivers/misc/lowmemorykiller/Kconfig"' not in text:
+        lines = text.splitlines()
+        indices = [i for i, line in enumerate(lines) if line.strip() == "endmenu"]
+        if not indices:
+            raise ValueError(f"{path}: no endmenu found")
+        index = indices[-1]
+        lines.insert(index, 'source "drivers/misc/lowmemorykiller/Kconfig"')
+        text = "\n".join(lines) + "\n"
+        changed = True
+
+    if changed:
+        write(path, text)
+    return changed
+
+
+def patch_misc_makefile(tree: str) -> bool:
+    path = os.path.join(tree, "drivers/misc/Makefile")
+    text = read(path)
+    changed = False
+    if "ashmem/" not in text:
+        if not text.endswith("\n"):
+            text += "\n"
+        text += "obj-$(CONFIG_ASHMEM) += ashmem/\n"
+        changed = True
+    if "logger/" not in text:
+        if not text.endswith("\n"):
+            text += "\n"
+        text += "obj-$(CONFIG_LOG) += logger/\n"
+        changed = True
+    if "lowmemorykiller/" not in text:
+        if not text.endswith("\n"):
+            text += "\n"
+        text += "obj-$(CONFIG_ANDROID_LOW_MEMORY_KILLER) += lowmemorykiller/\n"
+        changed = True
+    if changed:
+        write(path, text)
+    return changed
+
+
+def patch_gpu_probe_kconfig(tree: str) -> bool:
+    path = os.path.join(tree, "drivers/gpu/Kconfig")
+    text = read(path)
+    if 'source "drivers/gpu/vita/Kconfig"' in text:
+        return False
     lines = text.splitlines()
     indices = [i for i, line in enumerate(lines) if line.strip() == "endmenu"]
     if not indices:
         raise ValueError(f"{path}: no endmenu found")
     index = indices[-1]
-    lines.insert(index, 'source "drivers/misc/ashmem/Kconfig"')
+    lines.insert(index, 'source "drivers/gpu/vita/Kconfig"')
     write(path, "\n".join(lines) + "\n")
     return True
 
 
-def patch_makefile(tree: str) -> bool:
-    path = os.path.join(tree, "drivers/misc/Makefile")
+def patch_gpu_probe_makefile(tree: str) -> bool:
+    path = os.path.join(tree, "drivers/gpu/Makefile")
     text = read(path)
-    if "ashmem/" in text:
+    if "vita/" in text:
         return False
     if not text.endswith("\n"):
         text += "\n"
-    text += "obj-$(CONFIG_ASHMEM) += ashmem/\n"
+    text += "obj-$(CONFIG_VITA_GPU_PROBE) += vita/\n"
     write(path, text)
     return True
 
@@ -55,7 +118,7 @@ def patch_makefile(tree: str) -> bool:
 def patch_binder_makefile(tree: str) -> bool:
     """Select the 32-bit binder ABI.
 
-    Android 5.1 userspace is 32-bit and libbinder rejects any driver whose
+    Android 4.2/5.1 userspace is 32-bit and libbinder rejects any driver whose
     protocol version is not 7.  Linux 6.12's binder.h only reports 7 (and only
     uses 32-bit binder_uintptr_t/binder_size_t) when BINDER_IPC_32BIT is
     defined.  Mainline no longer exposes a Kconfig symbol for it, so define it
@@ -68,7 +131,7 @@ def patch_binder_makefile(tree: str) -> bool:
     if not text.endswith("\n"):
         text += "\n"
     text += (
-        "\n# AndroidOnVita: 32-bit ARM Android 5.1 userspace expects binder\n"
+        "\n# AndroidOnVita: 32-bit ARM Android userspace expects binder\n"
         "# protocol 7 and 32-bit binder_uintptr_t/binder_size_t.\n"
         "ccflags-y += -DBINDER_IPC_32BIT\n"
     )
@@ -100,10 +163,14 @@ def main(argv: list[str]) -> int:
 
     try:
         changed = []
-        if patch_kconfig(tree):
+        if patch_misc_kconfig(tree):
             changed.append("drivers/misc/Kconfig")
-        if patch_makefile(tree):
+        if patch_misc_makefile(tree):
             changed.append("drivers/misc/Makefile")
+        if patch_gpu_probe_kconfig(tree):
+            changed.append("drivers/gpu/Kconfig")
+        if patch_gpu_probe_makefile(tree):
+            changed.append("drivers/gpu/Makefile")
         if patch_binder_makefile(tree):
             changed.append("drivers/android/Makefile")
         if patch_dts_makefile(tree):

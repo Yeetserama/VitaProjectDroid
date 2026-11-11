@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: GPL-2.0
+config ANDROID_LOW_MEMORY_KILLER
+	tristate "Android lowmemorykiller"
+	depends on ANDROID
+	default y if ANDROID
+	help
+	  This is the Android lowmemorykiller driver. It monitors memory usage
+	  and kills processes when memory is low, based on their oom_adj scores.
+	  This driver was removed from mainline Linux in 6.12 but is still
+	  required for Android 4.x and earlier (Android 5.0+ uses userspace lmkd).
+
+	  If you are building Android 4.x or earlier, say Y.

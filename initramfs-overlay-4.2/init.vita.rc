@@ -1,0 +1,109 @@
+# Android 4.2 platform init for the PlayStation Vita (PCH-1000).
+#
+# Imported from init.rc via:
+#     import /init.${ro.hardware}.rc
+# with androidboot.hardware=vita on the kernel command line.
+
+on init
+    # Stock devices export this from init.<hardware>.rc; the SDK ramdisk's
+    # init.environ.rc does not.  android.os.Debug.<clinit> builds its default
+    # trace path with Environment.getLegacyExternalStorageDirectory(), which
+    # calls new File(System.getenv("EXTERNAL_STORAGE")) without a null check.
+    # Without the variable, Debug fails to initialise, and because
+    # ZygoteInit.preloadResources() calls Debug.startAllocCounting() first,
+    # zygote dies with ExceptionInInitializerError before system_server starts.
+    #
+    # The value must match the image's storage_list.xml exactly.  This SDK
+    # image declares a single fixed "USB storage" volume at /storage/sdcard,
+    # so any other path (notably /storage/sdcard0) makes
+    # Environment.getStorageVolume() throw and MountService kills system_server
+    # in onDaemonConnected -> PackageManagerService.scanAvailableAsecs().
+    export EXTERNAL_STORAGE /storage/sdcard
+
+    # SELinux and binder are set up by init itself.  debugfs is not mounted by
+    # stock Android; mount it here for tracing and sw_sync diagnostics.
+    mkdir /sys/kernel/debug 0755 root root
+    mount debugfs debugfs /sys/kernel/debug
+
+    # Android 4.2 uses kernel logger - ensure /dev/logger exists
+    mkdir /dev/logger 0755 root root
+
+on fs
+    # /system and /data are loop-mounted from ur0; /cache is a tmpfs.
+    mount_all /fstab.vita
+
+on post-fs-data
+    # Android normally lets system_server create /data/system.  We need the
+    # directory earlier for the input-device configuration symlinks.
+    mkdir /data/system 0771 system system
+    chown system system /data/system
+    chmod 0771 /data/system
+
+    mkdir /data/system/devices 0750 system system
+    mkdir /data/system/devices/keylayout 0750 system system
+    mkdir /data/system/devices/idc 0750 system system
+
+    # EventHub looks first in $ANDROID_ROOT/usr/... and then in
+    # $ANDROID_DATA/system/devices/... .  /system is a read-only loop mount,
+    # so point the second location at files that live on the initramfs.
+    symlink /usr/keylayout/PlayStation_Vita_Buttons__Syscon_.kl /data/system/devices/keylayout/PlayStation_Vita_Buttons__Syscon_.kl
+    symlink /usr/idc/PlayStation_Vita_Touchscreen__Syscon_.idc /data/system/devices/idc/PlayStation_Vita_Touchscreen__Syscon_.idc
+
+on boot
+    # Android's own `on init` sets loglevel 3, which hides init/service and
+    # vita-net progress from the framebuffer.  This is a headless bring-up
+    # image, so raise it again for the rest of the boot: the console is the
+    # only live output until adb is reachable.  boot.log keeps everything
+    # regardless.
+    loglevel 7
+
+    # Headless bring-up: keep the heavy framework stopped until explicitly
+    # requested.  `start` on the vita.ui trigger clears SVC_DISABLED again.
+    # SurfaceFlinger is gated too so a headless boot does not run the boot
+    # animation forever; the UI trigger starts it before zygote.
+    stop zygote
+    stop surfaceflinger
+    stop media
+    stop drm
+    stop ril-daemon
+
+    # adb over TCP is the only usable debug transport on this port.
+    start adbd
+
+    # The framebuffer is exposed through the kernel's "graphics" class, which
+    # ueventd maps to /dev/graphics/fb0.  SurfaceFlinger's fbdev path needs it
+    # to be writable by the graphics group.
+    chmod 0660 /dev/graphics/fb0 2>/dev/null
+    chown root graphics /dev/graphics/fb0 2>/dev/null
+
+    write /proc/sys/vm/swappiness 100
+
+# `adb shell setprop vita.ui 1` (or touch ur0:/android/ui and reboot) turns the
+# framework on after the core services are up.  Start SurfaceFlinger first so
+# system_server finds the composer as soon as WindowManagerService starts.
+on property:vita.ui=1
+    start surfaceflinger
+    start zygote
+
+# Keep a synced kernel-log snapshot on ur0.  Android init sets panic_on_oops=1,
+# so a kernel oops or a critical-service crash loop can reset the Vita at any
+# moment; an unsynced exFAT snapshot does not survive that.  The script snapshots
+# every 2 s for two minutes, then every 30 s for ten more minutes and exits.
+service vita-log /system/bin/sh /vita-log.sh
+    class core
+    user root
+    group root system
+    oneshot
+
+# Wi-Fi and the optional UI marker are handled by late_start scripts.  Both
+# run after mount_all, so /system/bin/sh and /mnt/ur0 are available.
+service vita-ui /system/bin/sh /vita-ui.sh
+    class late_start
+    user root
+    oneshot
+
+service vita-net /system/bin/sh /vita-net.sh
+    class late_start
+    user root
+    group root net_admin net_raw wifi
+    oneshot

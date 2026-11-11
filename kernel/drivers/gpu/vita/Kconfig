@@ -1,0 +1,19 @@
+# Vita GPU Probe Configuration
+
+config VITA_GPU_PROBE
+	bool "Vita SGX543MP4+ Read-Only Probe (G2)"
+	depends on ARCH_VITA
+	help
+	  This is a READ-ONLY probe for the Vita's PowerVR SGX543MP4+ GPU.
+	  It enables the GPU clock, deasserts reset, maps the register block,
+	  and reads ID/revision/status registers — printing them to dmesg.
+	  
+	  NO GPU WRITES are performed beyond clock/reset enable.
+	  
+	  This is the G2 gate in the reverse-engineering plan:
+	  https://github.com/.../androidonvita/docs/reverse-engineering.md
+	  
+	  If this probe hangs the bus or reads an invalid ID, the GPU
+	  reverse-engineering track stops here.
+	  
+	  Enable only for research builds. Not for production kernels.

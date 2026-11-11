@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: GPL-2.0
+config LOG
+	tristate "Android kernel logger"
+	depends on ANDROID
+	default y if ANDROID
+	help
+	  This is the Android kernel logger driver. It provides the /dev/logger
+	  interface used by Android's logging system (liblog) for kernel-space
+	  logging. This driver was removed from mainline Linux in 6.12 but is
+	  still required for Android 4.x and earlier.
+
+	  If you are building Android 4.x or earlier, say Y.

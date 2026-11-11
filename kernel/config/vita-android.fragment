@@ -185,3 +185,11 @@ CONFIG_UEVENT_HELPER=n
 CONFIG_IKCONFIG=y
 CONFIG_IKCONFIG_PROC=y
 CONFIG_LOCALVERSION="-vita-android"
+
+# ---------------------------------------------------------------------------
+# GPU Research: Vita SGX543MP4+ Read-Only Probe (G2 gate)
+# ---------------------------------------------------------------------------
+# Enable only for research builds. This probe powers on the GPU block,
+# reads ID/revision registers, and prints to dmesg. NO GPU WRITES.
+# See docs/reverse-engineering.md Phase 2 (G2).
+CONFIG_VITA_GPU_PROBE=y

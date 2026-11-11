@@ -1,0 +1,32 @@
+/*
+ * Vita GPU Device Tree Overlay (for G2 read-only probe)
+ *
+ * Apply this to vita1000.dts / vita.dtsi to enable the GPU probe.
+ * The actual base address, IRQ, clock, and reset must be determined
+ * from SceGpuEs4 reverse engineering (G1 phase).
+ *
+ * This is a TEMPLATE — fill in the actual values after G1.
+ */
+
+/ {
+	/* GPU node for SGX543MP4+ read-only probe */
+	gpu: gpu@XXXXXXXX {
+		compatible = "img,sgx543mp4", "img,sgx543", "img,sgx";
+		reg = <0xXXXXXXXX 0x10000>;	/* Physical base + 64KB register space */
+		interrupts = <GIC_SPI XX IRQ_TYPE_LEVEL_HIGH>;	/* IRQ from G1 */
+		clocks = <&XXXX CLK_ID_XXXX>;	/* Clock from G1 (syscon/clkgen) */
+		clock-names = "gpu";
+		resets = <&syscon RESET_BIT_XXXX>;	/* Reset bit from G1 */
+		reset-names = "gpu";
+		status = "okay";
+	};
+};
+
+/* 
+ * Also need to add clock/reset to syscon if not present:
+ *
+ * &syscon {
+ *     gpu_clk: clock@XXX { ... };
+ *     gpu_rst: reset@XXX { ... };
+ * };
+ */
