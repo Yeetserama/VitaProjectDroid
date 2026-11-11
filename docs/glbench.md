@@ -198,6 +198,7 @@ If the gate fails, the fallback order is:
 
 | Symptom | Likely cause |
 | --- | --- |
+| `run.sh: dirname: not found`, or it looks for `/lib/ld-linux-armhf.so.3` while the bundle is complete | Android 5.1 has no `dirname` and adb's `PATH` does not include `/bin`. The current `run.sh` resolves its directory with shell parameter expansion instead. With an older bundle, run the loader directly: `cd /data/glbench && ./lib/ld-linux-armhf.so.3 --inhibit-cache --library-path ./lib:./dri ./glbench --no-present`. |
 | `missing .../lib/ld-linux-armhf.so.3` | incomplete push; re-push the whole directory |
 | `DRI2: failed to load driver` | `dri/swrast_dri.so` missing or `LIBGL_DRIVERS_PATH` wrong; run with `EGL_LOG_LEVEL=info` |
 | `symbol lookup error` | mixed host/device libraries; always use `run.sh`, do not set `LD_LIBRARY_PATH` to system paths |
