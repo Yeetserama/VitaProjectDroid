@@ -10,6 +10,11 @@
 # v3 prints the full process list instead of a filtered one, so the glibc
 # wpa_supplicant and dhcpcd are visible even when Wi-Fi never associates.  It
 # also records the wireless interface state on every snapshot.
+#
+# v5 keeps the userspace processes but drops the kernel-thread flood, checks
+# whether adbd is actually listening on its TCP port, and removes the
+# status-0 "untracked pid" lines that Android init emits for every orphaned
+# helper.  Non-zero exits are kept: those are real failures.
 
 PATH=/bin:/sbin:/system/bin:/system/xbin
 export PATH
@@ -23,12 +28,32 @@ log() {
 }
 
 snapshot() {
+    port=$(getprop service.adb.tcp.port 2>/dev/null)
+    [ -n "$port" ] || port=5555
+    hex=$(printf '%04X' "$port" 2>/dev/null)
     {
         echo "=== vita-log: $(date 2>/dev/null) uptime: $(cut -d' ' -f1 /proc/uptime 2>/dev/null) s ==="
         echo "--- init.svc ---"
         getprop 2>/dev/null | grep '^\[init\.svc\.'
-        echo "--- ps ---"
-        ps 2>/dev/null
+        echo "--- ps (userspace) ---"
+        # Kernel threads are shown with their name in brackets; drop those
+        # lines but keep every userspace process, including short-lived ones.
+        ps 2>/dev/null | grep -v -E '\[[^]]*\][[:space:]]*$'
+        echo "--- ps (adb/wifi) ---"
+        ps 2>/dev/null | grep -E '[a]dbd|[n]etd|[w]pa_supplicant|[d]hcpcd|[v]ita-'
+        echo "--- adb ---"
+        echo "init.svc.adbd=$(getprop init.svc.adbd 2>/dev/null)"
+        echo "service.adb.tcp.port=$(getprop service.adb.tcp.port 2>/dev/null)"
+        inet=$(ifconfig mlan0 2>/dev/null | sed -n 's/.*inet addr:\([0-9.]*\).*/\1/p')
+        [ -n "$inet" ] || inet=$(ifconfig wlan0 2>/dev/null | sed -n 's/.*inet addr:\([0-9.]*\).*/\1/p')
+        echo "wifi inet: ${inet:-none}"
+        echo "LISTEN on port $port:"
+        listeners=$(awk -v p=":$hex" 'FNR > 1 && $4 == "0A" && substr($2, length($2) - length(p) + 1) == p { print "  " $2 " uid=" $8 }' /proc/net/tcp /proc/net/tcp6 2>/dev/null)
+        if [ -n "$listeners" ]; then
+            echo "$listeners"
+        else
+            echo "  (none)"
+        fi
         echo "--- net ---"
         for iface in mlan0 wlan0; do
             [ -e "/sys/class/net/$iface" ] || continue
@@ -37,8 +62,10 @@ snapshot() {
         done
         echo "--- logcat (last 200 lines) ---"
         timeout 5 logcat -d -v threadtime -t 200 2>/dev/null
+        echo "--- init reaping (status-0 lines removed from dmesg below) ---"
+        dmesg 2>/dev/null | grep -c -E 'init: (waitpid returned pid [0-9]+, status = 00000000|untracked pid [0-9]+ exited with status 0)'
         echo "--- dmesg ---"
-        dmesg 2>/dev/null
+        dmesg 2>/dev/null | grep -v -E 'init: (waitpid returned pid [0-9]+, status = 00000000|untracked pid [0-9]+ exited with status 0)' || true
     } > "$TMP" 2>/dev/null || return 1
 
     sync

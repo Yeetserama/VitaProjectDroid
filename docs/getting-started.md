@@ -137,16 +137,27 @@ It mirrors the last 400 supplicant log lines to
 (fallback `wlan0`). Wi-Fi is optional for the first kernel/init test but
 required for adb over TCP.
 
-The v4 kernel disables the Marvell Bluetooth SDIO transport. `btmrvl_sdio`
-shares the SD8787 card and firmware with `mwifiex`; on the v3 boot its probe
-waited about 100 seconds for a Bluetooth image, failed, and reset the card,
-dropping Wi-Fi after roughly 150 seconds. Bluetooth is not used by the headless
-image, so the transport stays off until there is a reason to debug it. The
-script also runs a watchdog after the first lease: if the interface disappears
-it waits for `mwifiex` to re-probe and restarts the supplicant, and if only the
+The v5 kernel disables the Marvell Bluetooth SDIO transport and cfg80211
+power save. `btmrvl_sdio` shares the SD8787 card and firmware with `mwifiex`;
+on the v3 boot its probe waited about 100 seconds for a Bluetooth image,
+failed, and reset the card, dropping Wi-Fi after roughly 150 seconds.
+Bluetooth is not used by the headless image, so the transport stays off until
+there is a reason to debug it. Power save is off because the v4 boot had a
+valid DHCP lease (broadcast) but no ping replies and no adb connection; the
+SD8787 firmware can sleep between beacons and drop unicast frames. The script
+also runs a watchdog after the first lease: if the interface disappears it
+waits for `mwifiex` to re-probe and restarts the supplicant, and if only the
 carrier drops it restarts after 30 seconds. Recovery attempts and a five-minute
 heartbeat go to `vita-net.log`, and the log of the failed phase is kept as
 `ur0:/android/wpa_supplicant.crash.log`.
+
+v5 also checks adb itself. After every DHCP lease and at each watchdog
+heartbeat it reads `/proc/net/tcp` for a `LISTEN` socket on the adb port. If
+the socket is missing it sets `service.adb.tcp.port` and restarts adbd once.
+The log then contains the exact `adb connect <ip>:5555` command, plus an
+`--- adb ---` / `adb check` block with the interface address, the route table,
+and the `INPUT` firewall rules. That distinguishes "adbd never listened" from
+"adbd listens but the network drops the connection".
 
 `ur0:/android/vita-net.sh`, `vita-log.sh`, and `vita-ui.sh` override the
 embedded copies when they start with `#!`. Copy a new script there and reboot
@@ -220,9 +231,10 @@ show how far the boot got.
 | Console stops at `class_start core`, no `adbd` | A `critical` core service is restarting (`healthd`, `lmkd`, `servicemanager`, `ueventd`). `boot.log` names the service and includes recent logcat. After more than four crashes in four minutes init reboots into recovery. |
 | `servicemanager` logs `binder: driver version differs from user space` | The kernel advertises binder protocol 8. Rebuild with `-DBINDER_IPC_32BIT` in `drivers/android/Makefile`; check `build-info.txt` for `binder ABI: 32-bit (protocol 7)`. |
 | adbd never reachable, console alive | Wi-Fi/DHCP problem: read `ur0:/android/vita-net.log` and `ur0:/android/wpa_supplicant.log`. |
-| Wi-Fi works, then drops after about two minutes and comes back later | `btmrvl_sdio` bound the SD8787 Bluetooth function and reset the shared card. The v4 kernel disables `CONFIG_BT_MRVL`/`CONFIG_BT_MRVL_SDIO`; check `build-info.txt` for `bt: Marvell SD8787 SDIO transport disabled` and `dmesg` for `btmrvl`. |
-| `vita-net.log` shows `watchdog: carrier lost` or `watchdog: ... disappeared` | The firmware reset the card after the first lease. The script waits for `mlan0` to return and restarts the supplicant; `wpa_supplicant.crash.log` holds the log from before the reset. If this repeats, the Bluetooth transport is still enabled or power save is the next suspect. |
-| `boot.log` has `init: waitpid returned pid ...` / `untracked pid ... exited with status 0` | Normal init reaping, not a failure. |
+| Wi-Fi works, then drops after about two minutes and comes back later | `btmrvl_sdio` bound the SD8787 Bluetooth function and reset the shared card. The v5 kernel disables `CONFIG_BT_MRVL`/`CONFIG_BT_MRVL_SDIO`; check `build-info.txt` for `bt: Marvell SD8787 SDIO transport disabled` and `dmesg` for `btmrvl`. |
+| `vita-net.log` shows `watchdog: carrier lost` or `watchdog: ... disappeared` | The firmware reset the card after the first lease. The script waits for `mlan0` to return and restarts the supplicant; `wpa_supplicant.crash.log` holds the log from before the reset. If this repeats, check that the Bluetooth transport is really disabled and look for `mwifiex` errors in the saved dmesg. |
+| DHCP lease and a `LISTEN` socket on 5555, but the PC cannot ping or connect | The link can carry broadcast/DHCP but not unicast between the two clients. The v5 kernel disables cfg80211 power save; if it still fails, the phone hotspot is probably isolating clients. Turn off client/AP isolation or tether both machines through a router/AP that allows client-to-client traffic. |
+| `boot.log` has `init: waitpid returned pid ...` / `untracked pid ... exited with status 0` | Healthy init reaping. v5 removes these status-0 lines from the dmesg block and prints their count under `--- init reaping ---`; non-zero exits are still shown. |
 | `dhcpcd: flock ... Try again` | Two `dhcpcd` instances raced for the lease file. The script starts `dhcpcd` only after the carrier is up and the watchdog starts it once per recovery; check for a manual `dhcpcd` left running under adb. |
 | `wpa_supplicant.log` has `sched_scan start` but no `CTRL-EVENT-SCAN-RESULTS` | Scheduled-scan offload is broken on this driver/kernel. The v4 script sets `disable_scan_offload=1`; check that the generated config in `vita-net.log` contains it. |
 | `vita-net.log` shows `carrier=0` and the supplicant log has no `Trying to associate` | The supplicant has no usable scan results. Confirm the SSID is broadcast on 2.4 GHz, the AP uses WPA2-PSK, and the regdomain allows its channel. The debug log lists scan results and reject reasons. |
@@ -233,8 +245,17 @@ show how far the boot got.
 
 Once Wi-Fi associates and DHCP succeeds, `vita-net.sh` writes the interface
 address to `/data/misc/wifi/vita-net.log` and to `ur0:/android/vita-net.log`.
-It also copies the supplicant log to `ur0:/android/wpa_supplicant.log`. On the
-PC:
+A healthy boot logs:
+
+```
+vita-net: adb: listener on port 5555 (init.svc.adbd=running); adb connect 192.168.43.70:5555
+vita-net: adb check: inet=192.168.43.70 port=5555
+```
+
+`adb check` is followed by `/proc/net/route` and `iptables -S INPUT`. If the
+socket is missing, the same lines say `no listener on port 5555 ... restarting
+adbd` and the script waits up to 10 seconds for the new listener. Copy the
+supplicant log to `ur0:/android/wpa_supplicant.log`. On the PC:
 
 ```sh
 adb connect <vita-ip>:5555
@@ -263,9 +284,12 @@ adb shell mount
 
 If adb is not reachable, check the framebuffer console for `vita-net` errors and
 the DHCP address, then read `ur0:/android/vita-net.log` and
-`ur0:/android/wpa_supplicant.log`. If the console shows Android init starting but
-no network, the Wi-Fi config, the firmware path, or `dhcpcd`'s `/data/misc/dhcp`
-directory is the first thing to fix.
+`ur0:/android/wpa_supplicant.log`. The `LISTEN on port` line in `boot.log`
+shows whether adbd bound its TCP socket at all; `(none)` means the problem is
+on the Vita, while a listener plus a failed ping points at the network path
+(cfg80211 power save or hotspot client isolation). If the console shows
+Android init starting but no network, the Wi-Fi config, the firmware path, or
+`dhcpcd`'s `/data/misc/dhcp` directory is the first thing to fix.
 
 ## 6. Enable Wi-Fi details and the UI
 

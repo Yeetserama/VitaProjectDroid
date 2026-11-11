@@ -16,13 +16,22 @@
 # watchdog restarts the supplicant when the interface comes back, or waits for
 # mwifiex to re-probe and then reconnects.
 #
+# v5 checks adb itself.  The v4 boot had a stable link and a running adbd but
+# the PC could neither ping the Vita nor connect to 5555, so the log now
+# records whether adbd really owns a LISTEN socket, the address to connect to,
+# the route table and the INPUT rules.  The kernel fragment also disables
+# cfg80211 power save: the SD8787 firmware can drop unicast frames while the
+# station sleeps between beacons, which would leave DHCP (broadcast) working
+# while ping and adb time out.
+#
 # This script therefore:
 #   * adds disable_scan_offload=1 so wpa_supplicant performs normal scans,
 #   * adds country=IE unless the user config already sets a country,
 #   * runs one supplicant with -d -t debug logging and mirrors the log to ur0,
 #   * waits for the carrier to come up before starting dhcpcd exactly once,
 #   * retries once with ap_scan=2 if normal scanning still does not associate,
-#   * keeps a watchdog on carrier and lease after the first successful lease.
+#   * keeps a watchdog on carrier and lease after the first successful lease,
+#   * verifies adbd is listening after every lease and logs the connect command.
 #
 # Every script can also be overridden from ur0:/android/; see /init.vita.
 
@@ -65,6 +74,75 @@ carrier() {
 # Integer uptime seconds, used by the watchdog to rate-limit its log writes.
 now_s() {
     cut -d' ' -f1 /proc/uptime 2>/dev/null | cut -d. -f1
+}
+
+iface_ip() {
+    /sbin/busybox ifconfig "$IFACE" 2>/dev/null \
+        | sed -n 's/.*inet addr:\([0-9.]*\).*/\1/p' | head -n 1
+}
+
+# /proc/net/tcp{,6} lists "address:port" with the port in uppercase hex and
+# state 0A for LISTEN.  Checking the kernel table is more reliable than
+# guessing from the adbd process: adbd can run without a TCP listener.
+adb_listener() {
+    port=${1:-5555}
+    hex=$(printf '%04X' "$port" 2>/dev/null)
+    [ -n "$hex" ] || return 1
+    awk -v p=":$hex" 'FNR > 1 && $4 == "0A" && substr($2, length($2) - length(p) + 1) == p { found = 1 } END { exit(found ? 0 : 1) }' \
+        /proc/net/tcp /proc/net/tcp6 2>/dev/null
+}
+
+# One compact post-lease snapshot for the cases where the link is healthy but
+# adb does not answer: address, route, and the INPUT rules.
+adb_net_check() {
+    {
+        echo "vita-net: adb check: inet=$(iface_ip) port=$(getprop service.adb.tcp.port 2>/dev/null)"
+        echo "vita-net: /proc/net/route:"
+        cat /proc/net/route 2>/dev/null
+        echo "vita-net: iptables -S INPUT:"
+        /system/bin/iptables -S INPUT 2>&1
+        echo "vita-net: --- end adb check ---"
+    } > "$STATE_TMP" 2>&1
+    cat "$STATE_TMP" >> "$LOG" 2>/dev/null
+    cat "$STATE_TMP" >> "$UR0_LOG" 2>/dev/null
+    rm -f "$STATE_TMP"
+    sync_logs
+}
+
+# adbd is started by Android init before Wi-Fi exists.  If its listener is
+# missing, set the port property and restart it once the interface has an
+# address.  Always log the exact connect command so it is visible on the
+# framebuffer console, in vita-net.log, and in the ur0 copy.
+ensure_adb() {
+    port=$(getprop service.adb.tcp.port 2>/dev/null)
+    [ -n "$port" ] || port=5555
+    state=$(getprop init.svc.adbd 2>/dev/null)
+    ip=$(iface_ip)
+
+    if adb_listener "$port"; then
+        log "adb: listener on port $port (init.svc.adbd=${state:-unknown}); adb connect ${ip:-<vita-ip>}:$port"
+        return 0
+    fi
+
+    log "adb: no listener on port $port (init.svc.adbd=${state:-unknown}); restarting adbd"
+    if [ "$(getprop service.adb.tcp.port 2>/dev/null)" != "$port" ]; then
+        setprop service.adb.tcp.port "$port" >> "$LOG" 2>&1
+    fi
+    setprop ctl.restart adbd >> "$LOG" 2>&1
+
+    n=0
+    while [ $n -lt 10 ]; do
+        sleep 1
+        if adb_listener "$port"; then
+            ip=$(iface_ip)
+            log "adb: listener on port $port after restart; adb connect ${ip:-<vita-ip>}:$port"
+            return 0
+        fi
+        n=$((n + 1))
+    done
+
+    log "adb: still no listener on port $port (init.svc.adbd=$(getprop init.svc.adbd 2>/dev/null))"
+    return 1
 }
 
 # Both the busybox and the toolbox ifconfig print an IPv4 address, but the
@@ -186,6 +264,8 @@ dhcp_once() {
         if have_lease; then
             log "DHCP lease on $IFACE after ${n}s"
             state_block
+            ensure_adb
+            adb_net_check
             return 0
         fi
         if [ $((n % 10)) -eq 0 ]; then
@@ -298,9 +378,12 @@ watch_link() {
         fi
 
         # One heartbeat every five minutes is enough to prove the link is
-        # still alive without filling ur0 with duplicate state blocks.
+        # still alive without filling ur0 with duplicate state blocks.  Repeat
+        # the adb listener check here too, so a listener that died after the
+        # lease is noticed and adbd is restarted.
         if [ $((now - last_sync)) -ge 300 ]; then
             log "watchdog: link healthy (uptime ${now}s, $(/sbin/busybox ifconfig "$IFACE" 2>/dev/null | grep 'inet addr:' | sed 's/^[[:space:]]*//'))"
+            ensure_adb
             sync_wpa_log
             last_sync=$now
         fi
@@ -357,7 +440,7 @@ mkdir -p "$UR0" 2>/dev/null
 
 : > "$LOG"
 : > "$UR0_LOG" 2>/dev/null
-log "starting v4 (bt off, disable_scan_offload, debug supplicant, carrier-gated dhcpcd, watchdog)"
+log "starting v5 (bt off, disable_scan_offload, adb listener check, watchdog)"
 log "adbd tcp port: $(getprop service.adb.tcp.port 2>/dev/null)"
 
 if [ ! -f "$CONF" ]; then

@@ -147,6 +147,12 @@ CONFIG_MWIFIEX=y
 CONFIG_MWIFIEX_SDIO=y
 CONFIG_CFG80211_REQUIRE_SIGNED_REGDB=n
 
+# Do not put the station into cfg80211 power save.  The v4 boot had a valid
+# DHCP lease (broadcast) but no ping replies and no adb connection: the
+# SD8787 firmware can sleep between DTIM beacons and drop unicast frames.
+# Keep the radio awake until the link is proven on real hardware.
+# CONFIG_CFG80211_DEFAULT_PS is not set
+
 # Bluetooth: do not bind the SD8787 Bluetooth SDIO function.  It shares the
 # card and firmware with mwifiex, and btmrvl_sdio cannot download its own
 # image once the WLAN function has started: it waits ~100 s for the firmware
