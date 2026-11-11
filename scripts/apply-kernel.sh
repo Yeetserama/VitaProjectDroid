@@ -17,6 +17,11 @@ INITRAMFS=${2:-"$ROOT/build/initramfs.cpio"}
 OUT=${3:-"$ROOT/build/out"}
 ANDROID_VERSION=${4:-"5.1"}
 
+echo "apply-kernel.sh: ANDROID_VERSION=$ANDROID_VERSION"
+echo "apply-kernel.sh: KERNEL_SRC=$KERNEL_SRC"
+echo "apply-kernel.sh: INITRAMFS=$INITRAMFS"
+echo "apply-kernel.sh: OUT=$OUT"
+
 CROSS_COMPILE=${CROSS_COMPILE:-arm-linux-gnueabihf-}
 JOBS=${JOBS:-$(nproc 2>/dev/null || echo 4)}
 ARCH=arm
@@ -31,6 +36,11 @@ case "$ANDROID_VERSION" in
         BOOTARGS="earlyprintk keep_bootcon console=tty0 console=ttyS0,115200 androidboot.hardware=vita androidboot.selinux=permissive androidboot.console=tty0 androidboot.serialno=PCH1000 rdinit=/init.vita"
         FRAGMENT="$ROOT/kernel/config/vita-android-4.2.fragment"
         LOCALVERSION="-vita-android-4.2"
+        ;;
+    2.2)
+        BOOTARGS="earlyprintk keep_bootcon console=tty0 console=ttyS0,115200 androidboot.hardware=vita androidboot.console=tty0 androidboot.serialno=PCH1000 rdinit=/init.vita"
+        FRAGMENT="$ROOT/kernel/config/vita-android-2.2.fragment"
+        LOCALVERSION="-vita-android-2.2"
         ;;
     *)
         echo "apply-kernel: unknown Android version: $ANDROID_VERSION" >&2

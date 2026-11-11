@@ -45,6 +45,10 @@ KERNEL_SRC=${KERNEL_SRC:-"$BUILD_DIR/linux_vita"}
 # Priority: env var > argument > default
 ANDROID_VERSION=${ANDROID_VERSION:-${1:-"5.1"}}
 
+echo "build.sh: ANDROID_VERSION=$ANDROID_VERSION"
+echo "build.sh: ROOT=$ROOT"
+echo "build.sh: BUILD_DIR=$BUILD_DIR"
+
 case "$ANDROID_VERSION" in
     5.1)
         INITRAMFS="$BUILD_DIR/initramfs.cpio"
@@ -54,6 +58,11 @@ case "$ANDROID_VERSION" in
     4.2)
         INITRAMFS="$BUILD_DIR/initramfs.cpio-4.2"
         STAGE="$BUILD_DIR/initramfs-root-4.2"
+        OUT="$BUILD_DIR/out"
+        ;;
+    2.2)
+        INITRAMFS="$BUILD_DIR/initramfs.cpio-2.2"
+        STAGE="$BUILD_DIR/initramfs-root-2.2"
         OUT="$BUILD_DIR/out"
         ;;
     *)

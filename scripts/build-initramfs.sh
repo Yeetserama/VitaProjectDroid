@@ -23,6 +23,10 @@ OUT=${1:-"$ROOT/build/initramfs.cpio"}
 STAGE=${2:-"$ROOT/build/initramfs-root"}
 ANDROID_VERSION=${3:-"5.1"}
 
+echo "build-initramfs.sh: ANDROID_VERSION=$ANDROID_VERSION"
+echo "build-initramfs.sh: OUT=$OUT"
+echo "build-initramfs.sh: STAGE=$STAGE"
+
 case "$ANDROID_VERSION" in
     5.1)
         RAMDISK="$ROOT/prebuilt/ramdisk.img"
@@ -33,6 +37,11 @@ case "$ANDROID_VERSION" in
         RAMDISK="$ROOT/prebuilt/ramdisk-4.2.img"
         RAMDISK_SHA256=""  # Will be set after downloading
         OVERLAY="$ROOT/initramfs-overlay-4.2"
+        ;;
+    2.2)
+        RAMDISK="$ROOT/prebuilt/ramdisk-2.2.img"
+        RAMDISK_SHA256=""  # Will be set after downloading
+        OVERLAY="$ROOT/initramfs-overlay-2.2"
         ;;
     *)
         echo "build-initramfs: unknown Android version: $ANDROID_VERSION" >&2
