@@ -59,11 +59,13 @@ jobs:
             bison
             ca-certificates
             device-tree-compiler
+            e2fsprogs
             flex
             gcc-arm-linux-gnueabihf
             libelf-dev
             libssl-dev
             python3
+            unzip
             xz-utils
           )
           for attempt in 1 2 3; do
@@ -154,11 +156,13 @@ jobs:
             bison
             ca-certificates
             device-tree-compiler
+            e2fsprogs
             flex
             gcc-arm-linux-gnueabihf
             libelf-dev
             libssl-dev
             python3
+            unzip
             xz-utils
           )
           for attempt in 1 2 3; do
@@ -192,6 +196,12 @@ jobs:
           export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
           yes | sdkmanager --licenses >/dev/null 2>&1
           sdkmanager "system-images;android-17;default;armeabi-v7a"
+
+      - name: Copy Android 4.2 images to prebuilt
+        run: |
+          export ANDROID_HOME=$HOME/android-sdk
+          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
+          bash scripts/download-android-4.2.sh
 
       - name: Build Android 4.2.2 boot package
         run: |
@@ -262,11 +272,13 @@ jobs:
             bison
             ca-certificates
             device-tree-compiler
+            e2fsprogs
             flex
             gcc-arm-linux-gnueabihf
             libelf-dev
             libssl-dev
             python3
+            unzip
             xz-utils
           )
           for attempt in 1 2 3; do
