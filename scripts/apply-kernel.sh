@@ -32,6 +32,11 @@ case "$ANDROID_VERSION" in
         FRAGMENT="$ROOT/kernel/config/vita-android-4.2.fragment"
         LOCALVERSION="-vita-android-4.2"
         ;;
+    2.2)
+        BOOTARGS="earlyprintk keep_bootcon console=tty0 console=ttyS0,115200 androidboot.hardware=vita androidboot.console=tty0 androidboot.serialno=PCH1000 rdinit=/init.vita"
+        FRAGMENT="$ROOT/kernel/config/vita-android-2.2.fragment"
+        LOCALVERSION="-vita-android-2.2"
+        ;;
     *)
         echo "apply-kernel: unknown Android version: $ANDROID_VERSION" >&2
         exit 1
@@ -161,6 +166,14 @@ case "$ANDROID_VERSION" in
             require_symbol "$sym"
         done
         ;;
+    2.2)
+        for sym in CONFIG_LOG CONFIG_ANDROID_LOW_MEMORY_KILLER; do
+            require_symbol "$sym"
+        done
+        # 2.2 has no SELinux
+        require_absent CONFIG_SECURITY_SELINUX
+        require_absent CONFIG_SECURITY_SELINUX_DEVELOP
+        ;;
     5.1)
         # 5.1 uses userspace logd and lmkd
         ;;
@@ -198,6 +211,7 @@ echo "==> collecting artifacts"
 VERSION_SUFFIX=""
 case "$ANDROID_VERSION" in
     4.2) VERSION_SUFFIX="-4.2" ;;
+    2.2) VERSION_SUFFIX="-2.2" ;;
     5.1) VERSION_SUFFIX="" ;;
 esac
 
@@ -208,9 +222,13 @@ cp "$INITRAMFS" "$OUT/initramfs.cpio${VERSION_SUFFIX}"
 
 command -v fdtput >/dev/null 2>&1 || die "fdtput not found (install device-tree-compiler)"
 fdtput -t s "$OUT/vita.dtb${VERSION_SUFFIX}" /chosen bootargs "$BOOTARGS"
-cp "$OUT/vita.dtb${VERSION_SUFFIX}" "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}"
-fdtput -t s "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /chosen bootargs \
-    "${BOOTARGS/androidboot.selinux=permissive/androidboot.selinux=disabled}"
+
+# Android 2.2 has no SELinux, so no need for selinux-disabled DTB
+if [ "$ANDROID_VERSION" != "2.2" ]; then
+    cp "$OUT/vita.dtb${VERSION_SUFFIX}" "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}"
+    fdtput -t s "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /chosen bootargs \
+        "${BOOTARGS/androidboot.selinux=permissive/androidboot.selinux=disabled}"
+fi
 
 {
     echo "kernel: incognitojam/linux_vita vita-port-6.12.0"
@@ -227,14 +245,20 @@ fdtput -t s "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /chosen bootargs \
     echo
     echo "bootargs (vita.dtb):"
     echo "$BOOTARGS"
-    echo
-    echo "bootargs (vita-selinux-disabled.dtb):"
-    echo "${BOOTARGS/androidboot.selinux=permissive/androidboot.selinux=disabled}"
+    if [ "$ANDROID_VERSION" != "2.2" ]; then
+        echo
+        echo "bootargs (vita-selinux-disabled.dtb):"
+        echo "${BOOTARGS/androidboot.selinux=permissive/androidboot.selinux=disabled}"
+    fi
 } > "$OUT/build-info.txt${VERSION_SUFFIX}"
 
 (
     cd "$OUT"
-    sha256sum zImage${VERSION_SUFFIX} vita.dtb${VERSION_SUFFIX} vita1000.dtb${VERSION_SUFFIX} vita-selinux-disabled.dtb${VERSION_SUFFIX} initramfs.cpio${VERSION_SUFFIX} > SHA256SUMS${VERSION_SUFFIX}
+    if [ "$ANDROID_VERSION" = "2.2" ]; then
+        sha256sum zImage${VERSION_SUFFIX} vita.dtb${VERSION_SUFFIX} vita1000.dtb${VERSION_SUFFIX} initramfs.cpio${VERSION_SUFFIX} > SHA256SUMS${VERSION_SUFFIX}
+    else
+        sha256sum zImage${VERSION_SUFFIX} vita.dtb${VERSION_SUFFIX} vita1000.dtb${VERSION_SUFFIX} vita-selinux-disabled.dtb${VERSION_SUFFIX} initramfs.cpio${VERSION_SUFFIX} > SHA256SUMS${VERSION_SUFFIX}
+    fi
 )
 
 echo

@@ -34,6 +34,11 @@ case "$ANDROID_VERSION" in
         RAMDISK_SHA256=""  # Will be set after downloading
         OVERLAY="$ROOT/initramfs-overlay-4.2"
         ;;
+    2.2)
+        RAMDISK="$ROOT/prebuilt/ramdisk-2.2.img"
+        RAMDISK_SHA256=""  # Will be set after downloading
+        OVERLAY="$ROOT/initramfs-overlay-2.2"
+        ;;
     *)
         echo "build-initramfs: unknown Android version: $ANDROID_VERSION" >&2
         exit 1
@@ -127,31 +132,44 @@ mkdir -p "$STAGE/lib"
 cp -a "$VENDOR/lib/firmware" "$STAGE/lib/"
 
 echo "==> checking required files"
-for path in \
-    "$STAGE/init" \
-    "$STAGE/init.vita" \
-    "$STAGE/init.vita.rc" \
-    "$STAGE/fstab.vita" \
-    "$STAGE/ueventd.vita.rc" \
-    "$STAGE/default.prop" \
-    "$STAGE/vita-log.sh" \
-    "$STAGE/bin/sh" \
-    "$STAGE/sbin/busybox" \
-    "$STAGE/sbin/adbd" \
-    "$STAGE/sbin/healthd" \
-    "$STAGE/sbin/ueventd" \
-    "$STAGE/sepolicy" \
-    "$STAGE/property_contexts" \
-    "$STAGE/usr/keylayout/PlayStation_Vita_Buttons__Syscon_.kl" \
-    "$STAGE/usr/idc/PlayStation_Vita_Touchscreen__Syscon_.idc" \
-    "$STAGE/vita-linux/usr/sbin/wpa_supplicant" \
-    "$STAGE/vita-linux/lib/ld-linux-armhf.so.3" \
-    "$STAGE/vita-linux/usr/lib/libssl.so.3" \
-    "$STAGE/vita-linux/usr/lib/libcrypto.so.3" \
-    "$STAGE/lib/firmware/mrvl/sd8787_uapsta.bin" \
-    "$STAGE/lib/firmware/regulatory.db"; do
-    # Use -L as well: bin/sh is an absolute symlink to /sbin/busybox, and -e
-    # on the build host would follow it into the host's own root filesystem.
+# Base required files for all versions
+BASE_FILES="
+    $STAGE/init
+    $STAGE/init.vita
+    $STAGE/init.vita.rc
+    $STAGE/fstab.vita
+    $STAGE/ueventd.vita.rc
+    $STAGE/default.prop
+    $STAGE/vita-log.sh
+    $STAGE/bin/sh
+    $STAGE/sbin/busybox
+    $STAGE/sbin/adbd
+    $STAGE/sbin/ueventd
+    $STAGE/usr/keylayout/PlayStation_Vita_Buttons__Syscon_.kl
+    $STAGE/usr/idc/PlayStation_Vita_Touchscreen__Syscon_.idc
+    $STAGE/vita-linux/usr/sbin/wpa_supplicant
+    $STAGE/vita-linux/lib/ld-linux-armhf.so.3
+    $STAGE/vita-linux/usr/lib/libssl.so.3
+    $STAGE/vita-linux/usr/lib/libcrypto.so.3
+    $STAGE/lib/firmware/mrvl/sd8787_uapsta.bin
+    $STAGE/lib/firmware/regulatory.db"
+
+# Version-specific required files
+case "$ANDROID_VERSION" in
+    2.2)
+        # 2.2 has no SELinux, no healthd in same way
+        REQUIRED_FILES="$BASE_FILES"
+        ;;
+    *)
+        # 4.2 and 5.1 have SELinux
+        REQUIRED_FILES="$BASE_FILES
+        $STAGE/sbin/healthd
+        $STAGE/sepolicy
+        $STAGE/property_contexts"
+        ;;
+esac
+
+for path in $REQUIRED_FILES; do
     [ -e "$path" ] || [ -L "$path" ] || die "missing required initramfs file: ${path#"$STAGE"/}"
 done
 

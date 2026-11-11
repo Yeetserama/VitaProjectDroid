@@ -1,0 +1,189 @@
+# Android 2.2 (Froyo, API 8) bring-up additions for the PlayStation Vita (PCH-1000).
+#
+# Merged on top of arch/arm/configs/vita_defconfig with
+# scripts/kconfig/merge_config.sh.  CONFIG_MODULES is off in the Vita
+# defconfig, so everything Android needs must be built in.
+#
+# Key differences from Android 4.2/5.1:
+# - Dalvik VM only (no ART)
+# - No SELinux (added in Android 4.3)
+# - Uses kernel logger (CONFIG_LOG) and lowmemorykiller (CONFIG_ANDROID_LOW_MEMORY_KILLER)
+# - Older binder ABI (protocol 7 but different ioctl interface)
+# - yaffs2 filesystem support for system/data (though we use ext4 via loop)
+# - Simpler init system
+# - No surfaceflinger in the same way (SurfaceFlinger exists but simpler)
+
+# ---------------------------------------------------------------------------
+# Core Android IPC / shared memory
+# ---------------------------------------------------------------------------
+CONFIG_ANDROID_BINDER_IPC=y
+CONFIG_ANDROID_BINDER_DEVICES="binder"
+CONFIG_ANDROID_BINDERFS=n
+CONFIG_ASHMEM=y
+CONFIG_SHMEM=y
+
+# libsync / SurfaceFlinger fences
+CONFIG_DMA_SHARED_BUFFER=y
+CONFIG_SYNC_FILE=y
+CONFIG_SW_SYNC=y
+
+# ---------------------------------------------------------------------------
+# Kernel logger (removed in Linux 6.12, backported from 4.19)
+# Android 2.2 uses /dev/log kernel interface
+# ---------------------------------------------------------------------------
+CONFIG_LOG=y
+CONFIG_LOG_BUFFER_SIZE=128
+CONFIG_LOG_CPU_MAX_BUF_SIZE=128
+
+# ---------------------------------------------------------------------------
+# Low Memory Killer (removed in Linux 6.12, backported from 4.19)
+# ---------------------------------------------------------------------------
+CONFIG_ANDROID_LOW_MEMORY_KILLER=y
+
+# ---------------------------------------------------------------------------
+# cgroups: Android 2.2 init uses basic cgroups
+# ---------------------------------------------------------------------------
+CONFIG_CGROUPS=y
+CONFIG_MEMCG=y
+CONFIG_MEMCG_V1=y
+CONFIG_CGROUP_SCHED=y
+CONFIG_FAIR_GROUP_SCHED=y
+CONFIG_RT_GROUP_SCHED=y
+CONFIG_CGROUP_CPUACCT=y
+
+# ---------------------------------------------------------------------------
+# Filesystems
+# ---------------------------------------------------------------------------
+# We use ext4 loop images on ur0 (exFAT)
+CONFIG_EXT4_FS=y
+CONFIG_EXT4_FS_POSIX_ACL=y
+CONFIG_EXT4_FS_SECURITY=y
+CONFIG_FS_POSIX_ACL=y
+CONFIG_EXFAT_FS=y
+CONFIG_VFAT_FS=y
+CONFIG_NLS_CODEPAGE_437=y
+CONFIG_NLS_ISO8859_1=y
+CONFIG_NLS_UTF8=y
+
+# FUSE for sdcard daemon
+CONFIG_FUSE_FS=y
+
+CONFIG_TMPFS=y
+CONFIG_TMPFS_POSIX_ACL=y
+CONFIG_TMPFS_XATTR=y
+CONFIG_DEVTMPFS=y
+CONFIG_DEVTMPFS_MOUNT=y
+CONFIG_PROC_FS=y
+CONFIG_SYSFS=y
+CONFIG_DEBUG_FS=y
+CONFIG_UNIX98_PTYS=y
+
+# uinput for input injection
+CONFIG_INPUT_MISC=y
+CONFIG_INPUT_UINPUT=y
+
+# ---------------------------------------------------------------------------
+# Swap / low-memory support
+# ---------------------------------------------------------------------------
+CONFIG_SWAP=y
+CONFIG_ZRAM=y
+CONFIG_ZRAM_BACKEND_LZ4=y
+CONFIG_ZRAM_DEF_COMP_LZ4=y
+CONFIG_ZSMALLOC=y
+CONFIG_ZSMALLOC_STAT=y
+CONFIG_LZ4_COMPRESS=y
+CONFIG_LZ4_DECOMPRESS=y
+
+# ---------------------------------------------------------------------------
+# NO SELinux for Android 2.2 (added in 4.3)
+# ---------------------------------------------------------------------------
+# CONFIG_SECURITY_SELINUX is NOT set
+CONFIG_LSM="lockdown,yama,loadpin,safesetid,integrity"
+
+# ---------------------------------------------------------------------------
+# Networking
+# ---------------------------------------------------------------------------
+CONFIG_PACKET=y
+CONFIG_IPV6=y
+CONFIG_IP_ADVANCED_ROUTER=y
+CONFIG_IP_MULTIPLE_TABLES=y
+CONFIG_IPV6_MULTIPLE_TABLES=y
+CONFIG_IPV6_SUBTREES=y
+CONFIG_INET_DIAG=y
+CONFIG_INET_TCP_DIAG=y
+
+CONFIG_DUMMY=y
+CONFIG_TUN=y
+
+CONFIG_NETFILTER=y
+CONFIG_NETFILTER_ADVANCED=y
+CONFIG_NF_CONNTRACK=y
+CONFIG_NF_NAT=y
+CONFIG_NETFILTER_XTABLES=y
+
+CONFIG_IP_NF_IPTABLES=y
+CONFIG_IP_NF_FILTER=y
+CONFIG_IP_NF_MANGLE=y
+CONFIG_IP_NF_NAT=y
+CONFIG_IP_NF_TARGET_MASQUERADE=y
+CONFIG_IP_NF_TARGET_REJECT=y
+
+CONFIG_IP6_NF_IPTABLES=y
+CONFIG_IP6_NF_FILTER=y
+CONFIG_IP6_NF_MANGLE=y
+CONFIG_IP6_NF_NAT=y
+CONFIG_IP6_NF_TARGET_MASQUERADE=y
+
+CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
+CONFIG_NETFILTER_XT_MATCH_COMMENT=y
+CONFIG_NETFILTER_XT_MATCH_MARK=y
+CONFIG_NETFILTER_XT_MATCH_MULTIPORT=y
+CONFIG_NETFILTER_XT_MATCH_OWNER=y
+CONFIG_NETFILTER_XT_MATCH_PHYSDEV=y
+CONFIG_NETFILTER_XT_MATCH_STATE=y
+CONFIG_NETFILTER_XT_TARGET_IDLETIMER=y
+CONFIG_NETFILTER_XT_TARGET_MARK=y
+CONFIG_NETFILTER_XT_TARGET_NFLOG=y
+CONFIG_NETFILTER_XT_TARGET_TCPMSS=y
+
+# Wi-Fi: mwifiex + SD8787
+CONFIG_RFKILL=y
+CONFIG_CFG80211=y
+CONFIG_MAC80211=y
+CONFIG_MWIFIEX=y
+CONFIG_MWIFIEX_SDIO=y
+CONFIG_CFG80211_REQUIRE_SIGNED_REGDB=n
+
+# No power save
+# CONFIG_CFG80211_DEFAULT_PS is not set
+
+# No Bluetooth
+# CONFIG_BT_MRVL is not set
+# CONFIG_BT_MRVL_SDIO is not set
+
+# ---------------------------------------------------------------------------
+# Initramfs / userspace conveniences
+# ---------------------------------------------------------------------------
+CONFIG_BLK_DEV_LOOP=y
+CONFIG_BLK_DEV_LOOP_MIN_COUNT=8
+CONFIG_BINFMT_SCRIPT=y
+CONFIG_COREDUMP=y
+CONFIG_ELF_CORE=y
+CONFIG_KEYS=y
+CONFIG_INOTIFY_USER=y
+CONFIG_TIMERFD=y
+CONFIG_EVENTFD=y
+CONFIG_SIGNALFD=y
+CONFIG_AIO=y
+CONFIG_FW_LOADER=y
+
+CONFIG_UEVENT_HELPER=n
+
+CONFIG_IKCONFIG=y
+CONFIG_IKCONFIG_PROC=y
+CONFIG_LOCALVERSION="-vita-android-2.2"
+
+# ---------------------------------------------------------------------------
+# GPU Research
+# ---------------------------------------------------------------------------
+CONFIG_VITA_GPU_PROBE=y

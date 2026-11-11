@@ -1,0 +1,74 @@
+# Android 2.2 (Froyo) platform init for the PlayStation Vita (PCH-1000).
+#
+# Imported from init.rc via:
+#     import /init.${ro.hardware}.rc
+# with androidboot.hardware=vita on the kernel command line.
+
+on init
+    # Android 2.2 needs EXTERNAL_STORAGE for Debug class
+    export EXTERNAL_STORAGE /storage/sdcard
+
+    # debugfs for tracing
+    mkdir /sys/kernel/debug 0755 root root
+    mount debugfs debugfs /sys/kernel/debug
+
+    # Android 2.2 uses kernel logger
+    mkdir /dev/logger 0755 root root
+
+on fs
+    # /system and /data are loop-mounted from ur0; /cache is a tmpfs.
+    mount_all /fstab.vita
+
+on post-fs-data
+    # Create directories for input device configs
+    mkdir /data/system 0771 system system
+    mkdir /data/system/devices 0750 system system
+    mkdir /data/system/devices/keylayout 0750 system system
+    mkdir /data/system/devices/idc 0750 system system
+
+    # Symlink input configs from initramfs to data partition
+    symlink /usr/keylayout/PlayStation_Vita_Buttons__Syscon_.kl /data/system/devices/keylayout/PlayStation_Vita_Buttons__Syscon_.kl
+    symlink /usr/idc/PlayStation_Vita_Touchscreen__Syscon_.idc /data/system/devices/idc/PlayStation_Vita_Touchscreen__Syscon_.idc
+
+on boot
+    # Keep loglevel high for headless debugging
+    loglevel 7
+
+    # Headless bring-up: stop framework services
+    stop zygote
+    stop surfaceflinger
+    stop media
+    stop bootanim
+
+    # adb over TCP
+    start adbd
+
+    # Framebuffer permissions for SurfaceFlinger
+    chmod 0660 /dev/graphics/fb0 2>/dev/null
+    chown root graphics /dev/graphics/fb0 2>/dev/null
+
+    write /proc/sys/vm/swappiness 100
+
+# Enable framework via property or ur0:/android/ui
+on property:vita.ui=1
+    start surfaceflinger
+    start zygote
+
+# Kernel log snapshot service
+service vita-log /system/bin/sh /vita-log.sh
+    class core
+    user root
+    group root system
+    oneshot
+
+# Wi-Fi and UI services
+service vita-ui /system/bin/sh /vita-ui.sh
+    class late_start
+    user root
+    oneshot
+
+service vita-net /system/bin/sh /vita-net.sh
+    class late_start
+    user root
+    group root net_admin net_raw wifi
+    oneshot
