@@ -42,7 +42,8 @@ BUILD_DIR=${BUILD_DIR:-"$ROOT/build"}
 KERNEL_REF="a33b819fd7174f60b1d5bcb613de565b3f046687"
 KERNEL_URL="https://github.com/incognitojam/linux_vita/archive/${KERNEL_REF}.tar.gz"
 KERNEL_SRC=${KERNEL_SRC:-"$BUILD_DIR/linux_vita"}
-ANDROID_VERSION=${1:-"5.1"}
+# Priority: env var > argument > default
+ANDROID_VERSION=${ANDROID_VERSION:-${1:-"5.1"}}
 
 case "$ANDROID_VERSION" in
     5.1)
