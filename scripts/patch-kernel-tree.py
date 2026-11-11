@@ -90,6 +90,11 @@ def patch_misc_makefile(tree: str) -> bool:
 
 def patch_gpu_probe_kconfig(tree: str) -> bool:
     path = os.path.join(tree, "drivers/gpu/Kconfig")
+    if not os.path.exists(path):
+        # GPU subsystem may not exist in this kernel config; create minimal Kconfig
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("# SPDX-License-Identifier: GPL-2.0\n\nmenu \"GPU drivers\"\n\nendmenu\n")
     text = read(path)
     if 'source "drivers/gpu/vita/Kconfig"' in text:
         return False
@@ -105,6 +110,10 @@ def patch_gpu_probe_kconfig(tree: str) -> bool:
 
 def patch_gpu_probe_makefile(tree: str) -> bool:
     path = os.path.join(tree, "drivers/gpu/Makefile")
+    if not os.path.exists(path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("# SPDX-License-Identifier: GPL-2.0\n\n")
     text = read(path)
     if "vita/" in text:
         return False
