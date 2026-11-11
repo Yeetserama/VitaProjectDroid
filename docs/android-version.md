@@ -213,10 +213,14 @@ command. The duplicate then runs as root, overrides the real service, and is
 killed by SIGHUP when the adb session closes. Push a script and run it, or
 pull `ps` output and filter on the host.
 
-Recovery does not need a reboot: restart the real SurfaceFlinger
-(`stop surfaceflinger; sleep 3; start surfaceflinger`). Its `onrestart restart
-zygote` restarts the framework with it, and the new SF registers successfully
-because the stale entry has a zero handle.
+Recovery does not need a reboot: stop both services, then start them again
+(`stop zygote; stop surfaceflinger; sleep 3; start surfaceflinger; start
+zygote`). An explicit `stop` does **not** run SurfaceFlinger's `onrestart
+restart zygote` — that only fires when init restarts a service after an
+unexpected exit. If zygote is left running, the old `system_server` keeps a
+dead composer, the new SF never receives `bootFinished()`, and the boot
+animation loops. The new SF registers successfully because the stale entry has
+a zero handle.
 
 ### Low-RAM properties
 
