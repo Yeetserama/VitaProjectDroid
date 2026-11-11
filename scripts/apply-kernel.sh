@@ -58,6 +58,24 @@ echo "==> copying ashmem driver"
 rm -rf "$KERNEL_SRC/drivers/misc/ashmem"
 cp -a "$ROOT/kernel/ashmem" "$KERNEL_SRC/drivers/misc/ashmem"
 
+echo "==> applying project kernel patches"
+command -v patch >/dev/null 2>&1 || die "patch not found (install patch)"
+for p in "$ROOT"/kernel/patches/*.patch; do
+    [ -e "$p" ] || continue
+    if patch -p1 --batch --silent --dry-run -d "$KERNEL_SRC" < "$p" >/dev/null 2>&1; then
+        patch -p1 --batch --silent -d "$KERNEL_SRC" < "$p"
+    elif patch -p1 -R --batch --silent --dry-run -d "$KERNEL_SRC" < "$p" >/dev/null 2>&1; then
+        echo "already applied: $(basename "$p")"
+    else
+        die "cannot apply $(basename "$p")"
+    fi
+done
+
+grep -qF 'vita-audio-clk' "$KERNEL_SRC/drivers/mfd/vita-syscon.c" \
+    || die "audio clock patch did not apply"
+grep -qF 'wlf,wm8962' "$KERNEL_SRC/arch/arm/boot/dts/vita1000.dts" \
+    || die "WM8962 codec node patch did not apply"
+
 echo "==> wiring ashmem and Vita DTBs into the tree"
 python3 "$ROOT/scripts/patch-kernel-tree.py" "$KERNEL_SRC"
 

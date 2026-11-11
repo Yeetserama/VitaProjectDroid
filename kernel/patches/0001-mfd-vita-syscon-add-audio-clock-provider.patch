@@ -1,0 +1,147 @@
+diff --git a/drivers/mfd/vita-syscon.c b/drivers/mfd/vita-syscon.c
+index d616ccd..ee9f268 100644
+--- a/drivers/mfd/vita-syscon.c
++++ b/drivers/mfd/vita-syscon.c
+@@ -2,6 +2,7 @@
+ // Copyright (C) 2021 Sergi Granell
+ 
+ #include <linux/module.h>
++#include <linux/clk-provider.h>
+ #include <linux/delay.h>
+ #include <linux/i2c.h>
+ #include <linux/interrupt.h>
+@@ -62,6 +63,8 @@ void __weak sdhci_vita_trigger_rescan(int bus_index)
+ #define CLOCKGEN_REG_CLOCK		1
+ #define CLOCKGEN_CMD_REG(n)		((u8)((n) - 128))  /* reg 1 -> 0x81 */
+ #define CLOCKGEN_WLANBT_BIT		BIT(3)
++#define CLOCKGEN_AUDIO_BIT		BIT(4)
++#define CLOCKGEN_AUDIO_48K_BIT		BIT(0)
+ 
+ /*
+  * Read a single clockgen register using the CY27040 protocol.
+@@ -154,6 +157,107 @@ static int vita_clockgen_wlanbt_disable(struct vita_syscon *syscon)
+ 	return vita_clockgen_write_reg(syscon, CLOCKGEN_REG_CLOCK, reg_val);
+ }
+ 
++/*
++ * AudioClk is the codec master clock.  It must be enabled before the
++ * WM1803E answers on I2C.  Bit 0 picks the 24.576 MHz (48 kHz) family;
++ * the codec node uses this as its MCLK reference.
++ */
++static int vita_clockgen_audio_clk_set(struct vita_syscon *syscon, bool enable)
++{
++	u8 reg_val;
++	int ret;
++
++	ret = vita_clockgen_read_reg(syscon, CLOCKGEN_REG_CLOCK, &reg_val);
++	if (ret)
++		return ret;
++
++	if (enable)
++		reg_val |= CLOCKGEN_AUDIO_BIT | CLOCKGEN_AUDIO_48K_BIT;
++	else
++		reg_val &= ~CLOCKGEN_AUDIO_BIT;
++
++	ret = vita_clockgen_write_reg(syscon, CLOCKGEN_REG_CLOCK, reg_val);
++	if (ret)
++		return ret;
++
++	ret = vita_clockgen_read_reg(syscon, CLOCKGEN_REG_CLOCK, &reg_val);
++	if (ret)
++		return ret;
++
++	if (enable && !(reg_val & CLOCKGEN_AUDIO_BIT)) {
++		dev_err(syscon->dev, "clockgen: AudioClk bit did not stick!\n");
++		return -EIO;
++	}
++
++	return 0;
++}
++
++struct vita_audio_clk {
++	struct clk_hw hw;
++	struct vita_syscon *syscon;
++};
++
++static inline struct vita_audio_clk *to_vita_audio_clk(struct clk_hw *hw)
++{
++	return container_of(hw, struct vita_audio_clk, hw);
++}
++
++static int vita_audio_clk_prepare(struct clk_hw *hw)
++{
++	return vita_clockgen_audio_clk_set(to_vita_audio_clk(hw)->syscon, true);
++}
++
++static void vita_audio_clk_unprepare(struct clk_hw *hw)
++{
++	vita_clockgen_audio_clk_set(to_vita_audio_clk(hw)->syscon, false);
++}
++
++static unsigned long vita_audio_clk_recalc_rate(struct clk_hw *hw,
++						unsigned long parent_rate)
++{
++	return 24576000;
++}
++
++static const struct clk_ops vita_audio_clk_ops = {
++	.prepare = vita_audio_clk_prepare,
++	.unprepare = vita_audio_clk_unprepare,
++	.recalc_rate = vita_audio_clk_recalc_rate,
++};
++
++static int vita_syscon_register_audio_clk(struct vita_syscon *syscon)
++{
++	struct vita_audio_clk *clk;
++	struct clk_init_data init = {
++		.name = "vita-audio-clk",
++		.ops = &vita_audio_clk_ops,
++	};
++	int ret;
++
++	clk = devm_kzalloc(syscon->dev, sizeof(*clk), GFP_KERNEL);
++	if (!clk)
++		return -ENOMEM;
++
++	clk->syscon = syscon;
++	clk->hw.init = &init;
++
++	ret = devm_clk_hw_register(syscon->dev, &clk->hw);
++	if (ret) {
++		dev_err(syscon->dev, "failed to register audio clock: %d\n",
++			ret);
++		return ret;
++	}
++
++	ret = devm_of_clk_add_hw_provider(syscon->dev, of_clk_hw_simple_get,
++					  &clk->hw);
++	if (ret) {
++		dev_err(syscon->dev, "failed to add audio clock provider: %d\n",
++			ret);
++		return ret;
++	}
++
++	return 0;
++}
++
+ /*
+  * Exported WLAN power helpers — used by the pwrseq-vita-wlan driver.
+  * These wrap the clockgen I2C and Ernie SPI sequences so that the
+@@ -688,6 +792,17 @@ static int vita_syscon_probe(struct spi_device *spi)
+ 		}
+ 	}
+ 
++	ret = vita_syscon_register_audio_clk(syscon);
++	if (ret)
++		dev_warn(&spi->dev, "audio clock unavailable: %d\n", ret);
++	else if (of_property_read_bool(spi->dev.of_node,
++				       "vita,audio-clk-always-on")) {
++		ret = vita_clockgen_audio_clk_set(syscon, true);
++		if (ret)
++			dev_warn(&spi->dev,
++				 "failed to enable audio clock: %d\n", ret);
++	}
++
+ 	syscon->reboot_nb.notifier_call = vita_syscon_reboot_notify;
+ 	syscon->reboot_nb.priority = 255;
+ 	ret = register_reboot_notifier(&syscon->reboot_nb);

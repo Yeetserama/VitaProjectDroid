@@ -30,6 +30,7 @@ jobs:
             gcc-arm-linux-gnueabihf \
             libelf-dev \
             libssl-dev \
+            patch \
             python3 \
             xz-utils
 

@@ -1,0 +1,38 @@
+diff --git a/arch/arm/boot/dts/vita.dtsi b/arch/arm/boot/dts/vita.dtsi
+index 5f7b546..d22136d 100644
+--- a/arch/arm/boot/dts/vita.dtsi
++++ b/arch/arm/boot/dts/vita.dtsi
+@@ -242,6 +242,8 @@
+ 				reg = <0>;
+ 				#address-cells = <0>;
+ 				#size-cells = <0>;
++				#clock-cells = <0>;
++				clock-output-names = "vita-audio-clk";
+ 
+ 				vita,clockgen-i2c = <&i2c0>;
+ 
+diff --git a/arch/arm/boot/dts/vita1000.dts b/arch/arm/boot/dts/vita1000.dts
+index ec05ab2..44623bd 100644
+--- a/arch/arm/boot/dts/vita1000.dts
++++ b/arch/arm/boot/dts/vita1000.dts
+@@ -28,6 +28,20 @@
+ 
+ &i2c0 {
+ 	status = "okay";
++
++	/*
++	 * The WM1803E is WM8962-compatible.  AudioClk has to be running
++	 * before the codec answers on I2C; the syscon driver provides it.
++	 */
++	wm8962: codec@1a {
++		compatible = "wlf,wm8962";
++		reg = <0x1a>;
++		clocks = <&syscon>;
++	};
++};
++
++&syscon {
++	vita,audio-clk-always-on;
+ };
+ 
+ /* I2C1 disabled — bus scan empty on PCH-1000 (no powered consumers) */

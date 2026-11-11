@@ -16,6 +16,16 @@ CONFIG_ANDROID_BINDERFS=n
 CONFIG_ASHMEM=y
 CONFIG_SHMEM=y
 
+# ---------------------------------------------------------------------------
+# Audio: WM1803E codec (WM8962-compatible) on I2C0
+# ---------------------------------------------------------------------------
+# A1 bring-up only: bind the codec and read its ID.  The SoC I2S/DMA
+# controller is still unknown; there is no machine driver yet.
+CONFIG_SOUND=y
+CONFIG_SND=y
+CONFIG_SND_SOC=y
+CONFIG_SND_SOC_WM8962=y
+
 # libsync / SurfaceFlinger fences.  SW_SYNC provides /dev/sw_sync; the
 # dma-buf one is not the old staging driver and still exists in 6.12.
 CONFIG_DMA_SHARED_BUFFER=y
