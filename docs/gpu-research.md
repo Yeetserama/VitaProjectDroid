@@ -3,6 +3,9 @@
 Status: feasibility assessment, not a plan of record.
 Target: PCH-1000, LinuxOnVita kernel 6.12 (`a33b819`), Android 5.1.1 API 22.
 
+The staged reverse-engineering plan and its go/no-go gates are in
+[`reverse-engineering.md`](reverse-engineering.md).
+
 ## Verdict
 
 There is no GLES2 renderer that can be dropped into this image. A GLES2

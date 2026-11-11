@@ -111,6 +111,9 @@ modules in this repository.
 
 ## 5. If you want to reverse-engineer the Vita hardware
 
+The staged GPU/audio plan, workspace rules and go/no-go gates are in
+[`reverse-engineering.md`](reverse-engineering.md).
+
 Dumping your own console's firmware is useful for research:
 
 - **VitaShell** can browse and dump `os0:`, `vs0:`, `ur0:`, and `ux0:` content.

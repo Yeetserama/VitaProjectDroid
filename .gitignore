@@ -5,6 +5,11 @@ build/
 *.cpio
 *.part
 
+# Reverse-engineering workspace: never commit dumps or Ghidra projects
+re/dumps/
+re/ghidra/
+re/tmp/
+
 # Python
 __pycache__/
 *.py[cod]
