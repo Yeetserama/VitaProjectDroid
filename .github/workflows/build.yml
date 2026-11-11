@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   boot-package-5-1:
-    if: github.event.inputs.android_version == '5.1' || github.event.inputs.android_version == 'both' || github.event.inputs.android_version == '' || (github.event_name != 'workflow_dispatch' && github.ref != 'refs/heads/android-4.2')
+    if: github.event_name == 'workflow_dispatch' && (github.event.inputs.android_version == '5.1' || github.event.inputs.android_version == 'both') || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
     runs-on: ubuntu-24.04
     timeout-minutes: 75
 
@@ -122,7 +122,7 @@ jobs:
             build/out/build-info.txt
 
   boot-package-4-2:
-    if: github.event.inputs.android_version == '4.2' || github.event.inputs.android_version == 'both' || (github.event_name == 'push' && github.ref == 'refs/heads/android-4.2')
+    if: github.event_name == 'workflow_dispatch' && (github.event.inputs.android_version == '4.2' || github.event.inputs.android_version == 'both') || (github.event_name == 'push' && github.ref == 'refs/heads/android-4.2')
     runs-on: ubuntu-24.04
     timeout-minutes: 75
 
@@ -235,7 +235,7 @@ jobs:
             build/out/build-info.txt-4.2
 
   boot-package-2-2:
-    if: github.event.inputs.android_version == '2.2' || github.event.inputs.android_version == 'both' || (github.event_name == 'push' && github.ref == 'refs/heads/android-2.2')
+    if: github.event_name == 'workflow_dispatch' && (github.event.inputs.android_version == '2.2' || github.event.inputs.android_version == 'both') || (github.event_name == 'push' && github.ref == 'refs/heads/android-2.2')
     runs-on: ubuntu-24.04
     timeout-minutes: 75
 
