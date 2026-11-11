@@ -19,7 +19,7 @@
 # v5 checks adb itself.  The v4 boot had a stable link and a running adbd but
 # the PC could neither ping the Vita nor connect to 5555, so the log now
 # records whether adbd really owns a LISTEN socket, the address to connect to,
-# the route table and the INPUT rules.  The kernel fragment also disables
+# the gateway ping, the ARP cache, the route table and the INPUT rules.  The kernel fragment also disables
 # cfg80211 power save: the SD8787 firmware can drop unicast frames while the
 # station sleeps between beacons, which would leave DHCP (broadcast) working
 # while ping and adb time out.
@@ -93,10 +93,22 @@ adb_listener() {
 }
 
 # One compact post-lease snapshot for the cases where the link is healthy but
-# adb does not answer: address, route, and the INPUT rules.
+# adb does not answer: address, gateway, route, ARP cache, and firewall rules.
+# The gateway ping separates "the Vita cannot receive unicast at all" from
+# "the phone blocks client-to-client traffic while the gateway is reachable".
 adb_net_check() {
+    gw=$(getprop "dhcp.$IFACE.gateway" 2>/dev/null)
     {
         echo "vita-net: adb check: inet=$(iface_ip) port=$(getprop service.adb.tcp.port 2>/dev/null)"
+        echo "vita-net: gateway=${gw:-unknown}"
+        if [ -n "$gw" ]; then
+            ping_bin=/bin/ping
+            [ -x "$ping_bin" ] || ping_bin=/system/bin/ping
+            echo "vita-net: ping gateway $gw:"
+            "$ping_bin" -c 1 -W 2 "$gw" 2>&1 | tail -n 4
+        fi
+        echo "vita-net: /proc/net/arp:"
+        cat /proc/net/arp 2>/dev/null
         echo "vita-net: /proc/net/route:"
         cat /proc/net/route 2>/dev/null
         echo "vita-net: iptables -S INPUT:"

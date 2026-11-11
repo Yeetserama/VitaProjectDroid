@@ -54,6 +54,8 @@ snapshot() {
         else
             echo "  (none)"
         fi
+        echo "--- arp ---"
+        cat /proc/net/arp 2>/dev/null
         echo "--- net ---"
         for iface in mlan0 wlan0; do
             [ -e "/sys/class/net/$iface" ] || continue

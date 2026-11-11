@@ -155,9 +155,11 @@ v5 also checks adb itself. After every DHCP lease and at each watchdog
 heartbeat it reads `/proc/net/tcp` for a `LISTEN` socket on the adb port. If
 the socket is missing it sets `service.adb.tcp.port` and restarts adbd once.
 The log then contains the exact `adb connect <ip>:5555` command, plus an
-`--- adb ---` / `adb check` block with the interface address, the route table,
-and the `INPUT` firewall rules. That distinguishes "adbd never listened" from
-"adbd listens but the network drops the connection".
+`--- adb ---` / `adb check` block with the interface address, a ping to the
+DHCP gateway, the ARP cache, the route table, and the `INPUT` firewall rules.
+That distinguishes "adbd never listened" from "adbd listens but the network
+drops the connection", and the gateway ping separates "the Vita cannot receive
+unicast at all" from "the phone allows gateway traffic but isolates clients".
 
 `ur0:/android/vita-net.sh`, `vita-log.sh`, and `vita-ui.sh` override the
 embedded copies when they start with `#!`. Copy a new script there and reboot
@@ -250,12 +252,17 @@ A healthy boot logs:
 ```
 vita-net: adb: listener on port 5555 (init.svc.adbd=running); adb connect 192.168.43.70:5555
 vita-net: adb check: inet=192.168.43.70 port=5555
+vita-net: gateway=192.168.43.1
+vita-net: ping gateway 192.168.43.1:
 ```
 
-`adb check` is followed by `/proc/net/route` and `iptables -S INPUT`. If the
-socket is missing, the same lines say `no listener on port 5555 ... restarting
-adbd` and the script waits up to 10 seconds for the new listener. Copy the
-supplicant log to `ur0:/android/wpa_supplicant.log`. On the PC:
+`adb check` continues with the gateway ping result, `/proc/net/arp`,
+`/proc/net/route`, and `iptables -S INPUT`. If the socket is missing, the same
+lines say `no listener on port 5555 ... restarting adbd` and the script waits
+up to 10 seconds for the new listener. The gateway ping working while the PC
+cannot ping the Vita is the signature of hotspot client isolation; a failed
+gateway ping points at the Wi-Fi receive path. Copy the supplicant log to
+`ur0:/android/wpa_supplicant.log`. On the PC:
 
 ```sh
 adb connect <vita-ip>:5555
