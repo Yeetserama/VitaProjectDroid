@@ -5,6 +5,7 @@
 # You may need to download from alternative sources or use a prebuilt image.
 #
 # This downloads the ramdisk.img, system.img, and userdata.img.
+# If userdata.img is larger than 512MB, it will be resized.
 
 set -euo pipefail
 
@@ -31,8 +32,8 @@ echo "3. Use a prebuilt system.img from a Froyo device port"
 echo ""
 echo "Required files (place in $OUT_DIR/):"
 echo "  ramdisk-2.2.img    -> $OUT_DIR/ramdisk-2.2.img"
-echo "  system.img         -> copy to ur0:/android/system.img on Vita"
-echo "  userdata.img       -> copy to ur0:/android/userdata.img on Vita"
+echo "  system-2.2.img     -> copy to ur0:/android/system.img on Vita"
+echo "  userdata-2.2.img   -> copy to ur0:/android/userdata.img on Vita (will be resized to 512MB)"
 echo ""
 
 if command -v sdkmanager >/dev/null 2>&1; then
@@ -42,6 +43,23 @@ if command -v sdkmanager >/dev/null 2>&1; then
         if [ -d "$SDK_PATH" ]; then
             echo "==> Copying ramdisk.img to $OUT_DIR/ramdisk-2.2.img"
             cp "$SDK_PATH/ramdisk.img" "$OUT_DIR/ramdisk-2.2.img"
+
+            echo "==> Copying system.img to $OUT_DIR/system-2.2.img"
+            cp "$SDK_PATH/system.img" "$OUT_DIR/system-2.2.img"
+
+            echo "==> Copying userdata.img to $OUT_DIR/userdata-2.2.img (will resize to 512MB)"
+            cp "$SDK_PATH/userdata.img" "$OUT_DIR/userdata-2.2.img"
+
+            # Resize userdata.img to 512MB
+            TARGET_SIZE=536870912
+            echo "==> Checking filesystem on userdata.img"
+            e2fsck -f -y "$OUT_DIR/userdata-2.2.img" || true
+            echo "==> Resizing userdata.img to 512MB"
+            resize2fs "$OUT_DIR/userdata-2.2.img" 512M
+            echo "==> Truncating userdata.img to exactly 512MB"
+            truncate -s $TARGET_SIZE "$OUT_DIR/userdata-2.2.img"
+            echo "==> Verifying final userdata.img size"
+            ls -lh "$OUT_DIR/userdata-2.2.img"
             echo "Done."
         fi
     else
@@ -52,6 +70,23 @@ elif [ -d "$ANDROID_HOME/system-images/android-8/default/armeabi-v7a" ]; then
     SDK_PATH="$ANDROID_HOME/system-images/android-8/default/armeabi-v7a"
     echo "==> Copying ramdisk.img to $OUT_DIR/ramdisk-2.2.img"
     cp "$SDK_PATH/ramdisk.img" "$OUT_DIR/ramdisk-2.2.img"
+
+    echo "==> Copying system.img to $OUT_DIR/system-2.2.img"
+    cp "$SDK_PATH/system.img" "$OUT_DIR/system-2.2.img"
+
+    echo "==> Copying userdata.img to $OUT_DIR/userdata-2.2.img (will resize to 512MB)"
+    cp "$SDK_PATH/userdata.img" "$OUT_DIR/userdata-2.2.img"
+
+    # Resize userdata.img to 512MB
+    TARGET_SIZE=536870912
+    echo "==> Checking filesystem on userdata.img"
+    e2fsck -f -y "$OUT_DIR/userdata-2.2.img" || true
+    echo "==> Resizing userdata.img to 512MB"
+    resize2fs "$OUT_DIR/userdata-2.2.img" 512M
+    echo "==> Truncating userdata.img to exactly 512MB"
+    truncate -s $TARGET_SIZE "$OUT_DIR/userdata-2.2.img"
+    echo "==> Verifying final userdata.img size"
+    ls -lh "$OUT_DIR/userdata-2.2.img"
 else
     echo "sdkmanager not found or Android 2.2 image not available."
     echo ""
@@ -59,6 +94,10 @@ else
     echo "1. Find a Froyo (2.2) ARMv7 system image from an alternate source"
     echo "2. Extract ramdisk.img, system.img, userdata.img"
     echo "3. Place them manually in $OUT_DIR/ and on the Vita"
+    echo "4. If userdata.img is larger than 512MB, resize it:"
+    echo "   e2fsck -f -y userdata.img"
+    echo "   resize2fs userdata.img 512M"
+    echo "   truncate -s 536870912 userdata.img"
 fi
 
 echo ""
