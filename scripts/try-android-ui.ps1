@@ -171,7 +171,11 @@ $null = Invoke-Adb -AdbArgs @('-s', $serial, 'pull', '/mnt/ur0/android/boot.log'
 
 $props = @(Get-Content -LiteralPath (Join-Path $OutDir 'post-getprop.txt') -ErrorAction SilentlyContinue)
 $selected = @()
-foreach ($key in @('init.svc.zygote', 'init.svc.surfaceflinger', 'init.svc.bootanim', 'vita.ui', 'ro.hardware')) {
+foreach ($key in @(
+        'init.svc.zygote', 'init.svc.surfaceflinger', 'init.svc.bootanim',
+        'sys.boot_completed', 'vita.ui', 'ro.hardware',
+        'ro.kernel.qemu', 'ro.kernel.qemu.gles', 'ro.sf.lcd_density',
+        'dalvik.vm.heapsize', 'dalvik.vm.heapgrowthlimit')) {
     $pattern = '^\[' + [regex]::Escape($key) + '\]: \[(.*)\]$'
     $match = $props | Where-Object { $_ -match $pattern } | Select-Object -First 1
     if ($match) { $selected += $match } else { $selected += "[$key]: (not set)" }
@@ -182,7 +186,7 @@ $logcatPath = Join-Path $OutDir 'logcat.txt'
 $interesting = @()
 if (Test-Path -LiteralPath $logcatPath) {
     $interesting = Select-String -Path $logcatPath -Pattern `
-        'FATAL|Fatal signal|surfaceflinger|SurfaceFlinger|EGL|egl|qemu_pipe|goldfish|gralloc|hwcomposer|HWComposer|lowmemorykiller|Out of memory' `
+        'FATAL|Fatal signal|ANR|system_server|SystemServer|ActivityManager|Launcher|Zygote|zygote|ExceptionInInitializer|Error preloading|Watchdog|Out of memory|OutOfMemory|lowmemorykiller|surfaceflinger|SurfaceFlinger|EGL|egl|qemu_pipe|goldfish|gralloc|hwcomposer|HWComposer' `
         -CaseSensitive:$false | ForEach-Object { $_.Line } | Select-Object -Last 60
 }
 Save-Text -Path (Join-Path $OutDir 'interesting.txt') -Text (($interesting -join "`r`n") + "`r`n")
