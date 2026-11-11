@@ -130,9 +130,11 @@ renders; the launcher appears, even if slow.
 **Goal:** the device is usable without a keyboard.
 
 - Target UI is the stock Android 5.1.1 framework, not a bespoke shell:
-  SystemUI status/nav bar, the Launcher home screen, and its white app drawer.
-  The SDK image ships only the old ICS-era `Launcher2`, so add AOSP
-  `Launcher3` (`com.android.launcher3`) and make it the home app. Google Now,
+  SystemUI status/nav bar, the Launcher home screen, and the app drawer. Use
+  the `Launcher2` already in the image as the home app; it is the ICS/Jelly
+  Bean-era launcher (Android 4.0-4.3), so the home screen and app drawer are
+  the older dark, tabbed style rather than the Lollipop white-card style in
+  the reference screenshots. No extra launcher APK for v0.2. Google Now,
   Play Store, and the other Google apps are out of scope.
 - Set `ro.sf.lcd_density=240` (or `wm density 240`) so the 960x544 panel lays
   out like a phone in landscape (640x363 dp) instead of a tiny tablet UI.
