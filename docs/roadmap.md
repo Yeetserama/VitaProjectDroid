@@ -104,13 +104,14 @@ simple Android app can be navigated with the Vita controls.
 
 ## Phase 5 - Display and graphics
 
-**Status: framework reaches `sys.boot_completed=1`; app testing in progress.**
-The self-contained `glbench` bundle reached about **30 fps effective** at
-960x544 with Mesa softpipe and the fb0 present copy, and the color order was
-correct. Inside Android, `ro.kernel.qemu=1` plus `ro.kernel.qemu.gles=0` makes
-SurfaceFlinger fall back to `libGLES_android.so` (PixelFlinger 1.4, GLES 1.x),
-and the 5.1 boot animation renders on the panel. Porting Mesa to bionic remains
-the route to GLES 2.0 and HWUI, but it is not required for the home screen.
+**Status: stock `Launcher2`, SystemUI, Settings, and Browser run; DNS and
+external storage remain.** The self-contained `glbench` bundle reached about
+**30 fps effective** at 960x544 with Mesa softpipe and the fb0 present copy, and
+the color order was correct. Inside Android, `ro.kernel.qemu=1` plus
+`ro.kernel.qemu.gles=0` makes SurfaceFlinger fall back to `libGLES_android.so`
+(PixelFlinger 1.4, GLES 1.x), and the 5.1 boot animation renders on the panel.
+Porting Mesa to bionic remains the route to GLES 2.0 and HWUI, but it is not
+required for the home screen.
 
 Two framework blockers are fixed:
 
@@ -125,9 +126,13 @@ Two framework blockers are fixed:
   `ComposerService::connectLocked()` and apps ANR'd. See
   [android-version.md](android-version.md#surfaceflinger-service-registration).
 
-`Launcher2` and SystemUI now start. Remaining work: verify Settings/Browser
-survive normal use, capture the home screen, and decide whether to provide a
-vold-backed external volume (currently `unmounted`).
+`Launcher2` and SystemUI start, Settings and Browser launch without ANR (1.3 s
+and 4.3 s), and the home screen renders at 960x544 with the stock landscape
+layout. Remaining UI work: configure DNS inside Android (hostname lookups fail
+because Wi-Fi bypasses `ConnectivityService`), provide a vold-backed external
+volume (currently `unmounted`), and re-verify from a cold boot of the CI-built
+`zImage`. Details in
+[android-version.md](android-version.md#verified-framework-state-v02).
 
 **Goal:** SurfaceFlinger presents frames and a trivial GLES 2.0 app runs.
 

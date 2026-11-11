@@ -222,6 +222,46 @@ dead composer, the new SF never receives `bootFinished()`, and the boot
 animation loops. The new SF registers successfully because the stale entry has
 a zero handle.
 
+### Verified framework state (v0.2)
+
+With the storage fix and a clean paired restart, the framework reaches a
+complete state on hardware:
+
+```
+surfaceflinger   10065
+zygote           10068
+system_server    10101
+systemui         10221
+launcher2        10363
+sys.boot_completed=1
+init.svc.bootanim=stopped
+```
+
+`dumpsys SurfaceFlinger` works and the composer service is registered.
+`Launcher2` draws its stock landscape layout at 960x544 / 240 dpi with the
+search bar on the left edge and the vertical hotseat on the right.
+
+Stock apps launch without ANR:
+
+| App | `am start -W` total | Result |
+| --- | --- | --- |
+| Settings | 1.3 s | renders |
+| Browser | 4.3 s | renders; shows a WebView error page |
+
+The Browser page is `net::ERR_NAME_NOT_RESOLVED`, not a rendering failure.
+Wi-Fi is brought up by `vita-net.sh` outside the framework: `wpa_supplicant`
+and `dhcpcd` configure `mlan0` directly, so `ConnectivityService` reports
+`Active default network: none` and netd has no resolver configuration. ICMP to
+`8.8.8.8` works and `dhcp.mlan0.dns1` holds the gateway address, but hostname
+lookups go to an empty netd resolver. Registering the interface with netd
+(`ndc network create`, `ndc resolver setnetdns`, `ndc network default set`) is
+the likely fix. A live `ndc network create` dropped adbd on the test unit, so
+test it from a boot image or with serial-console access instead of on a remote
+session.
+
+External storage remains `unmounted`, so apps that need a mounted card still
+fail. The launcher and Settings do not need it.
+
 ### Low-RAM properties
 
 The SDK image ships no `dalvik.vm.heap*` properties at all, so ART used its
