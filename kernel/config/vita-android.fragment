@@ -147,6 +147,16 @@ CONFIG_MWIFIEX=y
 CONFIG_MWIFIEX_SDIO=y
 CONFIG_CFG80211_REQUIRE_SIGNED_REGDB=n
 
+# Bluetooth: do not bind the SD8787 Bluetooth SDIO function.  It shares the
+# card and firmware with mwifiex, and btmrvl_sdio cannot download its own
+# image once the WLAN function has started: it waits ~100 s for the firmware
+# to become ready, fails, and the probe/remove cycle resets the SDIO card.
+# On the Vita that takes Wi-Fi (and adb) down about every two minutes.  v0.1
+# is headless and has no Bluetooth stack, so keep the Marvell transport off
+# until there is a reason to debug the shared-firmware handshake.
+# CONFIG_BT_MRVL is not set
+# CONFIG_BT_MRVL_SDIO is not set
+
 # ---------------------------------------------------------------------------
 # Initramfs / userspace conveniences
 # ---------------------------------------------------------------------------

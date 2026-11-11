@@ -8,12 +8,21 @@
 # scan-offload path: mwifiex reports that it supports NL80211 scheduled scan,
 # but this kernel/firmware combination never delivers the results.
 #
+# v4 adds a link watchdog.  The v3 boot associated and got a DHCP lease, then
+# the SD8787 firmware was reset after ~150 s.  btmrvl_sdio shares the card and
+# firmware with mwifiex: its probe waits ~100 s for a Bluetooth image, fails,
+# and the probe/remove cycle takes Wi-Fi with it.  The kernel fragment now
+# disables CONFIG_BT_MRVL/CONFIG_BT_MRVL_SDIO.  If a reset still happens, the
+# watchdog restarts the supplicant when the interface comes back, or waits for
+# mwifiex to re-probe and then reconnects.
+#
 # This script therefore:
 #   * adds disable_scan_offload=1 so wpa_supplicant performs normal scans,
 #   * adds country=IE unless the user config already sets a country,
 #   * runs one supplicant with -d -t debug logging and mirrors the log to ur0,
 #   * waits for the carrier to come up before starting dhcpcd exactly once,
-#   * retries once with ap_scan=2 if normal scanning still does not associate.
+#   * retries once with ap_scan=2 if normal scanning still does not associate,
+#   * keeps a watchdog on carrier and lease after the first successful lease.
 #
 # Every script can also be overridden from ur0:/android/; see /init.vita.
 
@@ -53,6 +62,11 @@ carrier() {
     cat "/sys/class/net/$IFACE/carrier" 2>/dev/null
 }
 
+# Integer uptime seconds, used by the watchdog to rate-limit its log writes.
+now_s() {
+    cut -d' ' -f1 /proc/uptime 2>/dev/null | cut -d. -f1
+}
+
 # Both the busybox and the toolbox ifconfig print an IPv4 address, but the
 # toolbox one prints `ip 0.0.0.0` for an unconfigured interface.  Use the
 # busybox applet, whose output only contains `inet addr:` once a lease exists.
@@ -84,6 +98,14 @@ sync_wpa_log() {
     [ -f "$WPA_LOG" ] || return 0
     tail -n 400 "$WPA_LOG" > "$UR0_WPA_LOG.new" 2>/dev/null || return 0
     mv "$UR0_WPA_LOG.new" "$UR0_WPA_LOG" 2>/dev/null || return 0
+    sync_logs
+}
+
+# Preserve the log of the phase that just failed before start_wpa truncates it.
+save_wpa_log() {
+    [ -f "$WPA_LOG" ] || return 0
+    tail -n 1000 "$WPA_LOG" > "$UR0/wpa_supplicant.crash.log.new" 2>/dev/null \
+        && mv -f "$UR0/wpa_supplicant.crash.log.new" "$UR0/wpa_supplicant.crash.log" 2>/dev/null
     sync_logs
 }
 
@@ -201,6 +223,91 @@ wait_for_carrier() {
     return 1
 }
 
+# Stay alive after the first lease and recover from a firmware reset.  The
+# SDIO card can disappear and come back; wpa_supplicant does not reattach to
+# the new interface instance by itself, so kill and restart it when that
+# happens.  If only the carrier drops, first give the driver 30 s to recover,
+# then restart the supplicant.  dhcpcd is always started exactly once per
+# recovery attempt.
+watch_link() {
+    was_down=0
+    last_sync=$(now_s)
+    while :; do
+        now=$(now_s)
+
+        if [ ! -e "/sys/class/net/$IFACE" ]; then
+            if [ "$was_down" -eq 0 ]; then
+                log "watchdog: $IFACE disappeared; waiting for mwifiex to re-probe"
+                save_wpa_log
+                state_block
+                was_down=1
+            fi
+            sleep 5
+            continue
+        fi
+
+        if [ "$was_down" -eq 1 ]; then
+            log "watchdog: $IFACE is back; restarting the supplicant"
+            was_down=0
+            /sbin/busybox ifconfig "$IFACE" up >> "$LOG" 2>&1
+            stop_wpa
+            start_wpa "$CTRL_CONF" "watchdog reconnect"
+            if wait_for_carrier 40 "watchdog reconnect"; then
+                dhcp_once || true
+            fi
+            sync_wpa_log
+            last_sync=$(now_s)
+            sleep 5
+            continue
+        fi
+
+        if [ "$(carrier)" != "1" ]; then
+            log "watchdog: carrier lost"
+            save_wpa_log
+            # Avoid the state-block output of wait_for_carrier while polling.
+            n=0
+            while [ $n -lt 30 ]; do
+                [ "$(carrier)" = "1" ] && break
+                sleep 2
+                n=$((n + 2))
+            done
+            if [ "$(carrier)" = "1" ]; then
+                log "watchdog: carrier returned after ${n}s"
+                dhcp_once || true
+            else
+                log "watchdog: carrier did not return; restarting the supplicant"
+                stop_wpa
+                start_wpa "$CTRL_CONF" "watchdog restart"
+                if wait_for_carrier 40 "watchdog restart"; then
+                    dhcp_once || true
+                fi
+            fi
+            sync_wpa_log
+            last_sync=$(now_s)
+            sleep 5
+            continue
+        fi
+
+        if ! have_lease; then
+            log "watchdog: no IPv4 lease; running dhcpcd"
+            dhcp_once || true
+            sync_wpa_log
+            last_sync=$(now_s)
+            sleep 5
+            continue
+        fi
+
+        # One heartbeat every five minutes is enough to prove the link is
+        # still alive without filling ur0 with duplicate state blocks.
+        if [ $((now - last_sync)) -ge 300 ]; then
+            log "watchdog: link healthy (uptime ${now}s, $(/sbin/busybox ifconfig "$IFACE" 2>/dev/null | grep 'inet addr:' | sed 's/^[[:space:]]*//'))"
+            sync_wpa_log
+            last_sync=$now
+        fi
+        sleep 10
+    done
+}
+
 # ap_scan=2 asks nl80211 to associate without a scan.  The nl80211 driver
 # warns that this can fail, but it is the only fallback available when the
 # scan path itself is broken.  It requires explicit security parameters, so
@@ -250,7 +357,7 @@ mkdir -p "$UR0" 2>/dev/null
 
 : > "$LOG"
 : > "$UR0_LOG" 2>/dev/null
-log "starting v3 (disable_scan_offload, debug supplicant, carrier-gated dhcpcd)"
+log "starting v4 (bt off, disable_scan_offload, debug supplicant, carrier-gated dhcpcd, watchdog)"
 log "adbd tcp port: $(getprop service.adb.tcp.port 2>/dev/null)"
 
 if [ ! -f "$CONF" ]; then
@@ -359,8 +466,13 @@ sync_logs
 
 if have_lease; then
     log "Wi-Fi up on $IFACE"
+    sync_logs
+    # Keep the service alive to recover from a firmware reset.  The watchdog
+    # only starts after a successful lease; an initial failure still exits
+    # with the diagnostic log above.
+    watch_link
 else
     log "no IPv4 address on $IFACE after the supplicant fallback"
     log "check the SSID/psk in $CONF, $UR0_WPA_LOG, and $WORK/vita-net.log"
+    sync_logs
 fi
-sync_logs

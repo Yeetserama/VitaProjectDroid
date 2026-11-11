@@ -35,6 +35,18 @@ require_symbol() {
     fi
 }
 
+require_absent() {
+    local sym=$1
+    # A symbol whose dependency is disabled disappears from .config entirely,
+    # so absence of an assignment is the success case.  Only =y/=m fail.
+    if grep -q "^${sym}=" "$KERNEL_SRC/.config"; then
+        echo "apply-kernel: required kernel symbol ${sym} is enabled" >&2
+        grep "^${sym}=" "$KERNEL_SRC/.config" >&2
+        echo "apply-kernel: check the fragment and the kernel build log" >&2
+        exit 1
+    fi
+}
+
 [ -d "$KERNEL_SRC" ] || die "kernel tree not found: $KERNEL_SRC"
 [ -f "$KERNEL_SRC/Makefile" ] || die "$KERNEL_SRC is not a kernel tree"
 [ -f "$INITRAMFS" ] || die "initramfs not found: $INITRAMFS (run build-initramfs.sh first)"
@@ -112,6 +124,13 @@ for sym in \
     require_symbol "$sym"
 done
 
+# btmrvl_sdio shares the SD8787 firmware with mwifiex.  If it binds, its
+# probe blocks for ~100 s waiting for a BT image, then fails and resets the
+# card, taking Wi-Fi down every ~2 minutes.  v0.1 has no Bluetooth stack.
+for sym in CONFIG_BT_MRVL CONFIG_BT_MRVL_SDIO; do
+    require_absent "$sym"
+done
+
 grep -q '^CONFIG_INITRAMFS_SOURCE="vita-initramfs.cpio"$' "$KERNEL_SRC/.config" \
     || die "CONFIG_INITRAMFS_SOURCE was not set"
 grep -q '^CONFIG_LSM=".*selinux' "$KERNEL_SRC/.config" \
@@ -146,7 +165,8 @@ fdtput -t s "$OUT/vita-selinux-disabled.dtb" /chosen bootargs \
     echo "built: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "toolchain: $("${CROSS_COMPILE}gcc" --version | head -n 1)"
     echo "binder ABI: 32-bit (protocol 7)"
-    echo "wifi: v3 (disable_scan_offload=1, debug supplicant, carrier-gated dhcpcd)"
+    echo "wifi: v4 (disable_scan_offload=1, debug supplicant, carrier-gated dhcpcd, watchdog)"
+    echo "bt: Marvell SD8787 SDIO transport disabled (shares firmware with mwifiex)"
     echo "initramfs bytes: $(stat -c %s "$OUT/initramfs.cpio" 2>/dev/null || wc -c < "$OUT/initramfs.cpio")"
     echo "zImage bytes: $(stat -c %s "$OUT/zImage" 2>/dev/null || wc -c < "$OUT/zImage")"
     echo

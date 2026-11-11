@@ -137,6 +137,17 @@ It mirrors the last 400 supplicant log lines to
 (fallback `wlan0`). Wi-Fi is optional for the first kernel/init test but
 required for adb over TCP.
 
+The v4 kernel disables the Marvell Bluetooth SDIO transport. `btmrvl_sdio`
+shares the SD8787 card and firmware with `mwifiex`; on the v3 boot its probe
+waited about 100 seconds for a Bluetooth image, failed, and reset the card,
+dropping Wi-Fi after roughly 150 seconds. Bluetooth is not used by the headless
+image, so the transport stays off until there is a reason to debug it. The
+script also runs a watchdog after the first lease: if the interface disappears
+it waits for `mwifiex` to re-probe and restarts the supplicant, and if only the
+carrier drops it restarts after 30 seconds. Recovery attempts and a five-minute
+heartbeat go to `vita-net.log`, and the log of the failed phase is kept as
+`ur0:/android/wpa_supplicant.crash.log`.
+
 `ur0:/android/vita-net.sh`, `vita-log.sh`, and `vita-ui.sh` override the
 embedded copies when they start with `#!`. Copy a new script there and reboot
 to test a Wi-Fi or logging change without rebuilding `zImage`. Delete the ur0
@@ -209,10 +220,14 @@ show how far the boot got.
 | Console stops at `class_start core`, no `adbd` | A `critical` core service is restarting (`healthd`, `lmkd`, `servicemanager`, `ueventd`). `boot.log` names the service and includes recent logcat. After more than four crashes in four minutes init reboots into recovery. |
 | `servicemanager` logs `binder: driver version differs from user space` | The kernel advertises binder protocol 8. Rebuild with `-DBINDER_IPC_32BIT` in `drivers/android/Makefile`; check `build-info.txt` for `binder ABI: 32-bit (protocol 7)`. |
 | adbd never reachable, console alive | Wi-Fi/DHCP problem: read `ur0:/android/vita-net.log` and `ur0:/android/wpa_supplicant.log`. |
-| `wpa_supplicant.log` has `sched_scan start` but no `CTRL-EVENT-SCAN-RESULTS` | Scheduled-scan offload is broken on this driver/kernel. The v3 script sets `disable_scan_offload=1`; check that the generated config in `vita-net.log` contains it. |
+| Wi-Fi works, then drops after about two minutes and comes back later | `btmrvl_sdio` bound the SD8787 Bluetooth function and reset the shared card. The v4 kernel disables `CONFIG_BT_MRVL`/`CONFIG_BT_MRVL_SDIO`; check `build-info.txt` for `bt: Marvell SD8787 SDIO transport disabled` and `dmesg` for `btmrvl`. |
+| `vita-net.log` shows `watchdog: carrier lost` or `watchdog: ... disappeared` | The firmware reset the card after the first lease. The script waits for `mlan0` to return and restarts the supplicant; `wpa_supplicant.crash.log` holds the log from before the reset. If this repeats, the Bluetooth transport is still enabled or power save is the next suspect. |
+| `boot.log` has `init: waitpid returned pid ...` / `untracked pid ... exited with status 0` | Normal init reaping, not a failure. |
+| `dhcpcd: flock ... Try again` | Two `dhcpcd` instances raced for the lease file. The script starts `dhcpcd` only after the carrier is up and the watchdog starts it once per recovery; check for a manual `dhcpcd` left running under adb. |
+| `wpa_supplicant.log` has `sched_scan start` but no `CTRL-EVENT-SCAN-RESULTS` | Scheduled-scan offload is broken on this driver/kernel. The v4 script sets `disable_scan_offload=1`; check that the generated config in `vita-net.log` contains it. |
 | `vita-net.log` shows `carrier=0` and the supplicant log has no `Trying to associate` | The supplicant has no usable scan results. Confirm the SSID is broadcast on 2.4 GHz, the AP uses WPA2-PSK, and the regdomain allows its channel. The debug log lists scan results and reject reasons. |
 | `carrier=1` but no `inet addr:` | Association works and DHCP does not. Check `dhcpcd`'s pid file under `/data/misc/dhcp`, and that `/data/misc/dhcp` is owned by `1014:1014`. |
-| `ifconfig` shows flags without `UP` | The interface was never brought up, which also explains `dhcpcd: waiting for carrier`. v3 uses busybox `ifconfig` because the Android `ip` binary produced no output on the first boot. |
+| `ifconfig` shows flags without `UP` | The interface was never brought up, which also explains `dhcpcd: waiting for carrier`. The script uses busybox `ifconfig` because the Android `ip` binary produced no output on the first boot. |
 
 ## 5. Connect adb
 

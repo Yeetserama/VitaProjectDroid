@@ -149,6 +149,7 @@ $pulls = @(
     @{ Remote = '/mnt/ur0/android/vita-net.prev.log';        Name = 'ur0-vita-net.prev.log' },
     @{ Remote = '/mnt/ur0/android/wpa_supplicant.prev.log';  Name = 'ur0-wpa_supplicant.prev.log' },
     @{ Remote = '/mnt/ur0/android/wpa_supplicant.normal.log'; Name = 'ur0-wpa_supplicant.normal.log' },
+    @{ Remote = '/mnt/ur0/android/wpa_supplicant.crash.log';  Name = 'ur0-wpa_supplicant.crash.log' },
     @{ Remote = '/data/misc/wifi/vita-net.log';              Name = 'data-vita-net.log' },
     @{ Remote = '/data/misc/wifi/wpa_supplicant.log';        Name = 'data-wpa_supplicant.log' }
 )
