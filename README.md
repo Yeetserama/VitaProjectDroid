@@ -2,14 +2,15 @@
 
 Run a full Android system on a modded PlayStation Vita.
 
-**Status:** first-boot bring-up. The kernel/initramfs boot package builds in
-GitHub Actions (Linux 6.12, Android 5.1.1 ramdisk, ashmem included) and the
-artifact is hash-verified. The first on-device boot reached Android
-`late_start` and started Wi-Fi, then reset to VitaOS. Source analysis showed
-that the kernel advertised binder protocol 8 while Android 5.1's 32-bit
-userspace requires protocol 7, crash-looping `servicemanager`. The current
-build selects the 32-bit binder ABI and keeps a synced boot log; a hardware
-retest is pending.
+**Status:** v0.1 complete. Headless Android 5.1.1 boots on a real PCH-1000
+with the LinuxOnVita 6.12 kernel, joins 2.4 GHz Wi-Fi, gets a DHCP lease, and
+is reachable over `adb connect <ip>:5555`. This was verified on hardware over
+both a hotspot and a mobile-data network. Two fixes got there: the kernel
+selects the 32-bit binder ABI (protocol 7) that Android 5.1's userspace
+requires, and v6 restores the `lookup main` policy rule that Android 5.1's
+netd flushes (its replacement rule is rejected with `EINVAL` on mainline
+kernels). Next: v0.2, a launcher/UI on the software GLES2 path, gated on the
+20 fps benchmark.
 Target:
 **Android 5.1.1 (API 22) on a PCH-1000 (OLED)**, using the LinuxOnVita 6.12
 kernel, with **no SD2Vita adapter**. Firmware is **3.65 with HENkaku + Enso**;

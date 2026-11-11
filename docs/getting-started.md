@@ -5,8 +5,10 @@ SD2Vita**.
 
 This guide starts from a console that already boots LinuxOnVita. It builds the
 Android boot package, copies the Android images to `ur0:`, and brings the
-system up headless so `adbd` can be reached over Wi-Fi. No Android boot has been
-attempted yet on this unit; treat the first run as a bring-up experiment.
+system up headless so `adbd` can be reached over Wi-Fi. The v0.1 bring-up has
+been verified on hardware: the Vita boots Android, joins 2.4 GHz Wi-Fi, gets a
+DHCP lease, and `adb connect <ip>:5555` succeeds. Follow the steps below to
+reproduce or reinstall it.
 
 ## 0. Before you start
 
@@ -263,7 +265,7 @@ show how far the boot got.
 | adbd never reachable, console alive | Wi-Fi/DHCP problem: read `ur0:/android/vita-net.log` and `ur0:/android/wpa_supplicant.log`. |
 | Wi-Fi works, then drops after about two minutes and comes back later | `btmrvl_sdio` bound the SD8787 Bluetooth function and reset the shared card. The v5 kernel disables `CONFIG_BT_MRVL`/`CONFIG_BT_MRVL_SDIO`; check `build-info.txt` for `bt: Marvell SD8787 SDIO transport disabled` and `dmesg` for `btmrvl`. |
 | `vita-net.log` shows `watchdog: carrier lost` or `watchdog: ... disappeared` | The firmware reset the card after the first lease. The script waits for `mlan0` to return and restarts the supplicant; `wpa_supplicant.crash.log` holds the log from before the reset. If this repeats, check that the Bluetooth transport is really disabled and look for `mwifiex` errors in the saved dmesg. |
-| DHCP lease and a `LISTEN` socket on 5555, but the PC cannot ping or connect | First check the v6 routing block: if `ip route get <gateway>` is unreachable or `ip rule` has no `lookup main` line, netd's rule flush is still in effect. `vita-net.log` should say `routing: restored the main lookup rule`; if it says `routing: could not restore the main lookup rule`, the busybox `ip` syntax needs fixing. If routing is healthy and the gateway ping still fails, the link can carry broadcast/DHCP but not unicast between the two clients: turn off hotspot client/AP isolation, or tether both machines through a router that allows client-to-client traffic. |
+| DHCP lease and a `LISTEN` socket on 5555, but the PC cannot ping or connect | First check the v6 routing block: if `ip route get <gateway>` is unreachable or `ip rule` has no `lookup main` line, netd's rule flush is still in effect. `vita-net.log` should say `routing: restored the main lookup rule`; if it says `routing: could not restore the main lookup rule`, the busybox `ip` syntax needs fixing. If the route resolves and the ARP table shows the gateway after the ping, the Vita is transmitting and the gateway answered ARP — a missing ICMP reply is then most likely Windows Firewall dropping echo requests on the Public profile, so try `adb connect` directly. If ARP stays empty, no unicast frame is leaving the Vita. |
 | logcat has `failed to initialize RouteController (Invalid argument)` | Expected on a mainline kernel: Android 5.1 netd's UID-range rule attributes (`FRA 18/19`) collide with `FRA_FWMARK`/`FRA_FLOW`, so the `lookup main` rule is rejected and all unicast routing breaks. v6 adds the rule back after DHCP; no action needed unless `vita-net.log` also reports that the repair failed. |
 | `vita-net.log` shows `ping gateway ...: Network unreachable` | No policy rule consults the main table, so the kernel cannot use the on-link route. This is the v5 signature that v6 repairs; compare the `--- routing before repair ---` and `--- routing after repair ---` blocks. |
 | The Vita's screen shows kernel messages but no `psvita@androidlinux:~/` prompt | Expected. That prompt is the LinuxOnVita rootfs shell, not Android. Android is headless and its own console shell is attached to `ttyS0`, which the Vita does not have. v6 prints the Wi-Fi/`adb connect` banner on `/dev/tty0`; a real UI arrives with v0.2. |
