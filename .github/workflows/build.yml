@@ -102,11 +102,6 @@ jobs:
             exit "$status"
           fi
 
-      - name: Show build information (5.1)
-        run: |
-          cat build/out/build-info.txt
-          cat build/out/SHA256SUMS
-
       - name: Upload Android 5.1.1 boot package
         uses: actions/upload-artifact@v4
         with:
@@ -214,11 +209,6 @@ jobs:
             echo "::error title=Build boot package failed::$message"
             exit "$status"
           fi
-
-      - name: Show build information (4.2)
-        run: |
-          cat build/out/build-info.txt-4.2
-          cat build/out/SHA256SUMS-4.2
 
       - name: Upload Android 4.2.2 boot package
         uses: actions/upload-artifact@v4
@@ -330,10 +320,6 @@ jobs:
             exit "$status"
           fi
 
-      - name: Show build information (2.2)
-        run: |
-          cat build/out/build-info.txt-2.2
-          cat build/out/SHA256SUMS-2.2
 
       - name: Upload Android 2.2 boot package
         uses: actions/upload-artifact@v4
