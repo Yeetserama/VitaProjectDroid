@@ -291,9 +291,11 @@ be read without adb. Each boot moves the previous copies to
 `wpa_supplicant.prev.log` and `vita-net.prev.log` before starting, so a second
 boot does not destroy the first run's evidence. If the normal-scan phase fails
 and the script restarts with `ap_scan=2`, the first phase is kept as
-`wpa_supplicant.normal.log`. The ur0 network log includes the generated
-supplicant config (with the psk removed), the carrier/operstate state blocks,
-and the mwifiex/cfg80211 dmesg lines.
+`wpa_supplicant.normal.log`. When the watchdog sees the interface or carrier
+drop, it saves the failed phase as `wpa_supplicant.crash.log` before restarting
+the supplicant. The ur0 network log includes the generated supplicant config
+(with the psk removed), the carrier/operstate state blocks, the watchdog
+recovery lines, and the mwifiex/cfg80211 dmesg lines.
 
 The framework is deliberately not started. When the core system is stable,
 enable it with:
