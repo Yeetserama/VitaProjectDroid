@@ -129,12 +129,18 @@ renders; the launcher appears, even if slow.
 
 **Goal:** the device is usable without a keyboard.
 
+- Target UI is the stock Android 5.1.1 framework, not a bespoke shell:
+  SystemUI status/nav bar, the Launcher home screen, and its white app drawer.
+  The SDK image ships only the old ICS-era `Launcher2`, so add AOSP
+  `Launcher3` (`com.android.launcher3`) and make it the home app. Google Now,
+  Play Store, and the other Google apps are out of scope.
+- Set `ro.sf.lcd_density=240` (or `wm density 240`) so the 960x544 panel lays
+  out like a phone in landscape (640x363 dp) instead of a tiny tablet UI.
 - Enable the framework with `vita.ui=1` or `ur0:/android/ui`.
 - Lights HAL: backlight and PS button LED.
 - Power HAL and `healthd`: stub or minimal battery reporting.
 - Audio HAL: stub with no output; do not block boot on audio.
 - Disable Bluetooth, camera, GPS, telephony in the product config.
-- Set density, boot animation, and a lightweight launcher.
 - Document unsupported hardware clearly.
 
 **Exit criteria:** a user can unlock, open Settings, connect to Wi-Fi, and launch
