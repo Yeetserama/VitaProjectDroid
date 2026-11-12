@@ -81,8 +81,14 @@ on boot
 # `adb shell setprop vita.ui 1` (or touch ur0:/android/ui and reboot) turns the
 # framework on after the core services are up.  Start SurfaceFlinger first so
 # system_server finds the composer as soon as WindowManagerService starts.
+#
+# `start media` is not optional: AudioService runs early in system_server and
+# blocks on media.audio_flinger / media.audio_policy.  The `stop media` above
+# clears SVC_DISABLED only when init is told to start it again, so a UI boot
+# without this line hangs in "Waiting for service media.audio_flinger...".
 on property:vita.ui=1
     start surfaceflinger
+    start media
     start zygote
 
 # Keep a synced kernel-log snapshot on ur0.  Android init sets panic_on_oops=1,
