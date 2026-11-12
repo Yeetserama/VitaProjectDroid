@@ -369,7 +369,7 @@ static int __init logger_init(void)
 	int i;
 	int sizes[LOGGER_LOG_MAX] = { 256 * 1024, 256 * 1024, 64 * 1024, 256 * 1024 };
 
-	log_class = class_create(THIS_MODULE, "logger");
+	log_class = class_create("logger");
 	if (IS_ERR(log_class))
 		return PTR_ERR(log_class);
 

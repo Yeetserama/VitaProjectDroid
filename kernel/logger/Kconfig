@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: GPL-2.0
+# The old staging menu's ANDROID symbol no longer exists in mainline 6.12, so
+# this driver cannot depend on it.  The Android version fragments enable it
+# explicitly; it stays off otherwise.
 config LOG
 	tristate "Android kernel logger"
-	depends on ANDROID
-	default y if ANDROID
+	default n
 	help
 	  This is the Android kernel logger driver. It provides the /dev/logger
 	  interface used by Android's logging system (liblog) for kernel-space
