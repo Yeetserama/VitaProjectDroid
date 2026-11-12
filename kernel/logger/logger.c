@@ -336,8 +336,15 @@ static int __init log_init_one(struct log_device *log, int idx, int size)
 	if (ret)
 		return ret;
 
+	/*
+	 * Keep the device names flat.  Android 2.3's ueventd derives the
+	 * /dev path from the last component of DEVPATH, not from DEVNAME, so
+	 * a nested "logger/log_main" name would become /dev/logger!log_main
+	 * after init remounts /dev.  Flat names give /dev/log_main, which
+	 * init.vita.rc links to /dev/log/main.
+	 */
 	log->device = device_create(log_class, NULL, MKDEV(MAJOR(log_dev), idx),
-				    NULL, "logger/%s", log_names[idx]);
+				    NULL, "%s", log_names[idx]);
 	if (IS_ERR(log->device)) {
 		cdev_del(&log->cdev);
 		return PTR_ERR(log->device);

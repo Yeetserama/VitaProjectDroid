@@ -15,16 +15,17 @@ on init
     mkdir /sys/kernel/debug 0755 root root
     mount debugfs debugfs /sys/kernel/debug
 
-    # The backported logger driver creates /dev/logger/*; Gingerbread's liblog
-    # opens /dev/log/*.  This `on init` action runs after Android init has
-    # replaced /dev with a fresh tmpfs, so the symlinks must be created here
-    # (anything /init.vita creates is discarded).  ueventd coldboot installs
-    # the /dev/logger/* targets before this action runs.
+    # The backported logger driver creates /dev/log_main (and friends) on this
+    # branch; Gingerbread's liblog opens /dev/log/*.  This `on init` action
+    # runs after Android init has replaced /dev with a fresh tmpfs, so the
+    # symlinks must be created here (anything /init.vita creates is
+    # discarded).  ueventd coldboot installs the /dev/log_* targets before
+    # this action runs.
     mkdir /dev/log 0755 root log
-    symlink /dev/logger/log_main /dev/log/main
-    symlink /dev/logger/log_radio /dev/log/radio
-    symlink /dev/logger/log_events /dev/log/events
-    symlink /dev/logger/log_system /dev/log/system
+    symlink /dev/log_main /dev/log/main
+    symlink /dev/log_radio /dev/log/radio
+    symlink /dev/log_events /dev/log/events
+    symlink /dev/log_system /dev/log/system
 
     # /cache is not in the SDK ramdisk.  Create it before `on fs` mounts tmpfs.
     mkdir /cache 0770 system cache
@@ -56,7 +57,17 @@ on fs
     # /system is already mounted read-only by /init.vita (it needs to bind the
     # software EGL config over the SDK image).  Only the remaining filesystems
     # are mounted here.
-    mount ext4 /dev/loop1 /data nosuid nodev
+    #
+    # Use /dev/block/loop1, not /dev/loop1: Android 2.3's init replaces /dev
+    # with a fresh tmpfs, and its ueventd places block devices under /dev/block
+    # during coldboot.  The /dev/loop1 node created by /init.vita is gone by
+    # the time this action runs.
+    #
+    # Keep the flags space-separated.  2.3's do_mount() maps known flag words
+    # to MS_* flags and only takes the final unrecognized argument as the
+    # filesystem option string, so `noatime,nosuid,nodev` in one token would
+    # be handed to ext4 as mount data.
+    mount ext4 /dev/block/loop1 /data noatime nosuid nodev noauto_da_alloc
     mount tmpfs tmpfs /cache mode=0755,size=64m
 
 on boot

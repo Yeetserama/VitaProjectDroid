@@ -24,7 +24,7 @@ boot package: Gingerbread has no SELinux, no `mount_all`, and no userspace
 
 | Component | Android 5.1 | Android 4.2 | Android 2.3 |
 | --- | --- | --- | --- |
-| Kernel logger | userspace `logd` | `CONFIG_LOG`, `/dev/logger/*` | `CONFIG_LOG`, `/dev/logger/*` + `/dev/log/*` symlinks |
+| Kernel logger | userspace `logd` | `CONFIG_LOG`, `/dev/logger/*` | `CONFIG_LOG`, `/dev/log_*` + `/dev/log/*` symlinks |
 | Low memory killer | userspace `lmkd` | `CONFIG_ANDROID_LOW_MEMORY_KILLER` | `CONFIG_ANDROID_LOW_MEMORY_KILLER` |
 | SELinux | permissive/enforcing | permissive | none (introduced in Android 4.3) |
 | Init filesystem mount | `mount_all /fstab.vita` | `mount_all /fstab.vita` | explicit `mount` commands |
@@ -35,23 +35,26 @@ boot package: Gingerbread has no SELinux, no `mount_all`, and no userspace
 
 ### Logger compatibility
 
-The backported 4.19 logger driver registers `/dev/logger/log_main`,
-`/dev/logger/log_radio`, `/dev/logger/log_events` and `/dev/logger/log_system`.
-Gingerbread's `liblog` still opens `/dev/log/main` and friends.
+The shared 4.19 logger driver names its class devices `logger/log_main` on the
+4.2/5.1 branches. Android 2.3's ueventd is older: it ignores `DEVNAME` and
+derives the node path from the last component of `DEVPATH`, which the kernel
+rewrites from `logger/log_main` to `logger!log_main`. That would leave
+`/dev/logger!log_main` nodes that nothing opens.
 
-Android 2.3's init mounts a fresh tmpfs over `/dev` during startup, so links
-created by `/init.vita` would be discarded. Instead, the `on init` action in
-`init.vita.rc` recreates them after that mount:
+The Gingerbread branch therefore registers flat names (`log_main`, ...), which
+ueventd maps to `/dev/log_main` and friends. Gingerbread's `liblog` still opens
+`/dev/log/main`, so the `on init` action in `init.vita.rc` creates links after
+Android init has mounted its fresh tmpfs over `/dev`:
 
 ```
-/dev/log/main   -> /dev/logger/log_main
-/dev/log/radio  -> /dev/logger/log_radio
-/dev/log/events -> /dev/logger/log_events
-/dev/log/system -> /dev/logger/log_system
+/dev/log/main   -> /dev/log_main
+/dev/log/radio  -> /dev/log_radio
+/dev/log/events -> /dev/log_events
+/dev/log/system -> /dev/log_system
 ```
 
 The nodes themselves are created by ueventd on coldboot with mode `0662`
-(`root:log`), matching Gingerbread's stock `/dev/log/*` rule.
+(`root:log`) from the appended `/ueventd.rc` rules.
 
 ### ueventd rules
 
@@ -65,8 +68,9 @@ rather than installing it under a versioned name.
 
 Gingerbread's init has no `mount_all` builtin. `/init.vita` mounts
 `/mnt/ur0`, attaches the images to loop devices and mounts `/system`
-read-only. `init.vita.rc` then mounts `/data` (`/dev/loop1`) and a tmpfs
-`/cache`. `fstab.vita` is kept as documentation only.
+read-only. `init.vita.rc` then mounts `/data` (`/dev/block/loop1`, as created
+by ueventd coldboot) and a tmpfs `/cache`. `fstab.vita` is kept as
+documentation only.
 
 `/system` is mounted before Android init because the SDK `egl.cfg` selects the
 emulator GL pipe (`libEGL_emulation.so`), which does not exist on the Vita.

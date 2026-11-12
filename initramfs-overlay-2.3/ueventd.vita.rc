@@ -8,13 +8,13 @@
 # /dev/uinput and /dev/graphics/*; these entries add the Vita-specific nodes.
 
 # Gingerbread's stock rule is /dev/log/*, but the backported 4.19 logger
-# driver names its class devices logger/log_main, so they appear under
-# /dev/logger.  init.vita.rc links /dev/log/* to these nodes.
-/dev/logger/*           0662   root       log
-/dev/logger/log_main    0662   root       log
-/dev/logger/log_radio   0662   root       log
-/dev/logger/log_events  0662   root       log
-/dev/logger/log_system  0662   root       log
+# driver uses flat class-device names (log_main, ...).  Android 2.3's ueventd
+# derives /dev paths from DEVPATH, so the nodes appear as /dev/log_main and
+# friends.  init.vita.rc links /dev/log/* to these nodes.
+/dev/log_main           0662   root       log
+/dev/log_radio          0662   root       log
+/dev/log_events         0662   root       log
+/dev/log_system         0662   root       log
 
 /dev/graphics/fb0       0660   root       graphics
 /dev/sw_sync            0660   system     graphics

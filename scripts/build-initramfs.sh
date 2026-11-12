@@ -165,7 +165,7 @@ for path in $REQUIRED_FILES; do
     [ -e "$path" ] || [ -L "$path" ] || die "missing required initramfs file: ${path#"$STAGE"/}"
 done
 
-grep -q '^/dev/logger/log_main' "$STAGE/ueventd.rc" \
+grep -q '^/dev/log_main' "$STAGE/ueventd.rc" \
     || die "Vita ueventd rules were not appended to /ueventd.rc"
 
 [ -x "$STAGE/init.vita" ] || die "init.vita is not executable"

@@ -31,8 +31,8 @@ CONFIG_SW_SYNC=y
 
 # ---------------------------------------------------------------------------
 # Kernel logger (removed in Linux 6.12, backported from 4.19)
-# Android 2.3's liblog opens /dev/log/*; /init.vita creates compatibility
-# symlinks to the driver's /dev/logger/* nodes.
+# Android 2.3's liblog opens /dev/log/*; init.vita.rc creates compatibility
+# symlinks to the driver's flat /dev/log_* nodes (see kernel/logger/logger.c).
 # ---------------------------------------------------------------------------
 CONFIG_LOG=y
 
