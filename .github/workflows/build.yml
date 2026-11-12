@@ -181,23 +181,11 @@ jobs:
           path: build/downloads
           key: linux-vita-a33b819fd7174f60b1d5bcb613de565b3f046687
 
-      - name: Download Android 4.2 SDK images
+      - name: Download Android 4.2.2 SDK images
         run: |
-          # Install Android SDK command line tools
-          SDK_URL="https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
-          curl -L -o /tmp/cmdline-tools.zip "$SDK_URL"
-          mkdir -p $HOME/android-sdk/cmdline-tools
-          unzip -q /tmp/cmdline-tools.zip -d $HOME/android-sdk/cmdline-tools
-          mv $HOME/android-sdk/cmdline-tools/cmdline-tools $HOME/android-sdk/cmdline-tools/latest
-          export ANDROID_HOME=$HOME/android-sdk
-          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
-          yes | sdkmanager --licenses >/dev/null 2>&1
-          sdkmanager "system-images;android-17;default;armeabi-v7a"
-
-      - name: Copy Android 4.2 images to prebuilt
-        run: |
-          export ANDROID_HOME=$HOME/android-sdk
-          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
+          # Pinned armeabi-v7a-17_r06.zip; the script verifies size and SHA1.
+          # No sdkmanager, no license prompts, no network dependency beyond
+          # dl.google.com.
           bash scripts/download-android-4.2.sh
 
       - name: Build Android 4.2.2 boot package

@@ -1,82 +1,171 @@
 #!/usr/bin/env bash
-# Download the Android 4.2.2 (API 17) SDK system image for armeabi-v7a.
+# Download the Android 4.2.2 (API 17) SDK system image for armeabi-v7a and
+# prepare the files the Vita build needs.
 #
-# This downloads the ramdisk.img, system.img, and userdata.img from Google's
-# SDK repository. The ramdisk.img is used by build-initramfs.sh and must be
-# placed at prebuilt/ramdisk-4.2.img. The system.img and userdata.img are
-# copied to ur0:/android/ on the Vita.
+# Source: https://dl.google.com/android/repository/sys-img/android/
+#         armeabi-v7a-17_r06.zip
 #
-# Note: The SDK userdata.img is often larger than needed (e.g., 2GB). This
-# script resizes it to 512MB to fit on ur0: alongside system.img (~750MB).
+# Outputs:
+#   prebuilt/ramdisk-4.2.img    stock ramdisk, embedded by build-initramfs.sh
+#   prebuilt/system-4.2.img     copy to ur0:/android/system.img on the Vita
+#   prebuilt/userdata-4.2.img   copy to ur0:/android/userdata.img on the Vita
+#
+# The SDK ships a 2 GiB userdata.img, which does not fit on ur0 next to the
+# 550 MiB system image.  This script creates a fresh 512 MiB ext4 image
+# instead; the framework builds /data on first boot.
 
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 SDK_DIR="$ROOT/downloads/android-17"
 OUT_DIR="$ROOT/prebuilt"
+ZIP="$SDK_DIR/armeabi-v7a-17_r06.zip"
+ZIP_URL="https://dl.google.com/android/repository/sys-img/android/armeabi-v7a-17_r06.zip"
+ZIP_SIZE=124437041
+ZIP_SHA1="a18a3fd0958ec4ef52507f58e414fc5c7dfd59d6"
+USERDATA_MB=512
 
 mkdir -p "$SDK_DIR" "$OUT_DIR"
 
-# Android 4.2.2 (API 17) ARM EABI v7a System Image
-# Package: system-images;android-17;default;armeabi-v7a
-# Using sdkmanager from Android SDK command line tools.
+die() {
+    echo "download-android-4.2: $*" >&2
+    exit 1
+}
 
-if command -v sdkmanager >/dev/null 2>&1; then
-    echo "==> Found sdkmanager, installing system-images;android-17;default;armeabi-v7a"
-    sdkmanager "system-images;android-17;default;armeabi-v7a"
-    SDK_PATH="$ANDROID_HOME/system-images/android-17/default/armeabi-v7a"
-elif [ -d "$ANDROID_HOME/system-images/android-17/default/armeabi-v7a" ]; then
-    echo "==> Found existing Android 4.2 SDK image at $ANDROID_HOME"
-    SDK_PATH="$ANDROID_HOME/system-images/android-17/default/armeabi-v7a"
+sha1_of() {
+    if command -v sha1sum >/dev/null 2>&1; then
+        sha1sum "$1" | awk '{print $1}'
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 1 "$1" | awk '{print $1}'
+    else
+        python3 - "$1" <<'EOF'
+import hashlib, sys
+h = hashlib.sha1()
+with open(sys.argv[1], "rb") as f:
+    for chunk in iter(lambda: f.read(1 << 20), b""):
+        h.update(chunk)
+print(h.hexdigest())
+EOF
+    fi
+}
+
+if [ -f "$ZIP" ]; then
+    actual=$(sha1_of "$ZIP")
+    if [ "$actual" != "$ZIP_SHA1" ]; then
+        echo "==> cached archive has SHA1 $actual, expected $ZIP_SHA1; re-downloading"
+        rm -f "$ZIP"
+    fi
+fi
+
+if [ ! -f "$ZIP" ]; then
+    echo "==> downloading $ZIP_URL"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fL --retry 5 --retry-delay 3 -o "$ZIP.part" "$ZIP_URL"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -O "$ZIP.part" "$ZIP_URL"
+    else
+        die "neither curl nor wget is available"
+    fi
+    mv "$ZIP.part" "$ZIP"
+fi
+
+actual_size=$(wc -c < "$ZIP" | tr -d ' ')
+[ "$actual_size" = "$ZIP_SIZE" ] || die "archive is $actual_size bytes, expected $ZIP_SIZE"
+actual_sha1=$(sha1_of "$ZIP")
+[ "$actual_sha1" = "$ZIP_SHA1" ] || die "archive SHA1 is $actual_sha1, expected $ZIP_SHA1"
+echo "==> verified archive: $ZIP_SIZE bytes, SHA1 $ZIP_SHA1"
+
+echo "==> extracting ramdisk.img, system.img and build.prop"
+python3 - "$ZIP" "$SDK_DIR/extract" <<'EOF'
+import os
+import sys
+import zipfile
+
+archive, dest = sys.argv[1], sys.argv[2]
+wanted = ("armeabi-v7a/ramdisk.img", "armeabi-v7a/system.img",
+          "armeabi-v7a/build.prop", "armeabi-v7a/source.properties")
+os.makedirs(dest, exist_ok=True)
+with zipfile.ZipFile(archive) as z:
+    names = set(z.namelist())
+    for name in wanted:
+        if name not in names:
+            raise SystemExit(f"{archive}: missing {name}")
+        out = os.path.join(dest, os.path.basename(name))
+        with z.open(name) as src, open(out, "wb") as dst:
+            while True:
+                chunk = src.read(1 << 20)
+                if not chunk:
+                    break
+                dst.write(chunk)
+        print(f"  {name} -> {out} ({os.path.getsize(out)} bytes)")
+EOF
+
+EXTRACT="$SDK_DIR/extract"
+
+# Sanity-check that this really is the 4.2.2 image before copying 550 MiB.
+grep -q '^ro.build.version.sdk=17$' "$EXTRACT/build.prop" \
+    || die "$EXTRACT/build.prop is not SDK 17"
+grep -q '^ro.build.version.release=4\.2' "$EXTRACT/build.prop" \
+    || die "$EXTRACT/build.prop is not Android 4.2.x"
+python3 - "$EXTRACT/system.img" <<'EOF'
+import sys
+
+# ext4 superblock magic lives at 1024 + 0x38.
+path = sys.argv[1]
+with open(path, "rb") as f:
+    f.seek(1024 + 0x38)
+    magic = f.read(2)
+if magic != b"\x53\xef":
+    raise SystemExit(f"{path}: not an ext2/3/4 filesystem (magic {magic!r})")
+print(f"  {path}: ext filesystem")
+EOF
+
+echo "==> installing ramdisk as $OUT_DIR/ramdisk-4.2.img"
+cp "$EXTRACT/ramdisk.img" "$OUT_DIR/ramdisk-4.2.img"
+
+echo "==> installing system image as $OUT_DIR/system-4.2.img"
+cp "$EXTRACT/system.img" "$OUT_DIR/system-4.2.img"
+
+USERDATA="$OUT_DIR/userdata-4.2.img"
+if command -v mke2fs >/dev/null 2>&1 && command -v truncate >/dev/null 2>&1; then
+    # A fresh image avoids rewriting the 2 GiB SDK blob and gives the Vita a
+    # small /data.  Android 4.2 creates its directory tree on first boot.
+    echo "==> creating a fresh ${USERDATA_MB} MiB ext4 userdata image"
+    rm -f "$USERDATA"
+    truncate -s "${USERDATA_MB}M" "$USERDATA"
+    mke2fs -q -t ext4 -F -L userdata "$USERDATA" \
+        || die "mke2fs failed (install e2fsprogs)"
+elif command -v resize2fs >/dev/null 2>&1 && command -v truncate >/dev/null 2>&1; then
+    echo "==> shrinking SDK userdata.img to ${USERDATA_MB} MiB"
+    cp "$EXTRACT/userdata.img" "$USERDATA"
+    e2fsck -f -y "$USERDATA" >/dev/null 2>&1 || true
+    resize2fs "$USERDATA" "${USERDATA_MB}M"
+    truncate -s "${USERDATA_MB}M" "$USERDATA"
+    e2fsck -f -y "$USERDATA" || true
 else
-    echo "==> sdkmanager not found. Please install Android SDK command line tools"
-    echo "    and run: sdkmanager \"system-images;android-17;default;armeabi-v7a\""
-    echo ""
-    echo "    Then run this script again, or manually copy:"
-    echo "      \$ANDROID_HOME/system-images/android-17/default/armeabi-v7a/ramdisk.img -> $OUT_DIR/ramdisk-4.2.img"
-    echo "      \$ANDROID_HOME/system-images/android-17/default/armeabi-v7a/system.img -> ur0:/android/system.img"
-    echo "      \$ANDROID_HOME/system-images/android-17/default/armeabi-v7a/userdata.img -> ur0:/android/userdata.img"
-    exit 1
+    die "mke2fs/resize2fs not found; install e2fsprogs to create userdata-4.2.img"
 fi
 
-if [ ! -d "$SDK_PATH" ]; then
-    echo "SDK image not found at $SDK_PATH" >&2
-    exit 1
-fi
-
-echo "==> Copying ramdisk.img to $OUT_DIR/ramdisk-4.2.img"
-cp "$SDK_PATH/ramdisk.img" "$OUT_DIR/ramdisk-4.2.img"
-
-echo "==> Copying system.img to $OUT_DIR/system-4.2.img"
-cp "$SDK_PATH/system.img" "$OUT_DIR/system-4.2.img"
-
-echo "==> Copying userdata.img to $OUT_DIR/userdata-4.2.img (will resize to 512MB)"
-cp "$SDK_PATH/userdata.img" "$OUT_DIR/userdata-4.2.img"
-
-# Resize userdata.img to 512MB (536870912 bytes)
-# The SDK image is often 2GB+, but we only need 512MB for Vita's ur0 partition
-TARGET_SIZE=536870912
-
-echo "==> Checking filesystem on userdata.img"
-e2fsck -f -y "$OUT_DIR/userdata-4.2.img" || true
-
-echo "==> Resizing userdata.img to 512MB"
-resize2fs "$OUT_DIR/userdata-4.2.img" 512M
-
-echo "==> Truncating userdata.img to exactly 512MB"
-truncate -s $TARGET_SIZE "$OUT_DIR/userdata-4.2.img"
-
-echo "==> Verifying final userdata.img size"
-ls -lh "$OUT_DIR/userdata-4.2.img"
-
-echo "==> Verifying ramdisk.img"
-file "$OUT_DIR/ramdisk-4.2.img"
+echo "==> verifying outputs"
+ls -l "$OUT_DIR/ramdisk-4.2.img" "$OUT_DIR/system-4.2.img" "$USERDATA"
+python3 - "$USERDATA" <<'EOF'
+import os, sys
+path = sys.argv[1]
+want = 512 * 1024 * 1024
+have = os.path.getsize(path)
+if have != want:
+    raise SystemExit(f"{path}: {have} bytes, expected {want}")
+with open(path, "rb") as f:
+    f.seek(1024 + 0x38)
+    if f.read(2) != b"\x53\xef":
+        raise SystemExit(f"{path}: not an ext filesystem")
+print(f"  {path}: {have} bytes, ext filesystem")
+EOF
 
 echo ""
-echo "Done. The following files are ready:"
-echo "  $OUT_DIR/ramdisk-4.2.img (for initramfs build)"
-echo "  $OUT_DIR/system-4.2.img (copy to ur0:/android/system.img on Vita)"
-echo "  $OUT_DIR/userdata-4.2.img (copy to ur0:/android/userdata.img on Vita, now 512MB)"
+echo "Done. Copy these to the Vita (ur0:/android/):"
+echo "  $OUT_DIR/system-4.2.img    -> ur0:/android/system.img"
+echo "  $USERDATA                  -> ur0:/android/userdata.img"
 echo ""
-echo "To build Android 4.2:"
+echo "Then build the boot package:"
 echo "  ANDROID_VERSION=4.2 scripts/build.sh"

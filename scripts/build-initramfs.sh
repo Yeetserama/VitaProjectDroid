@@ -35,7 +35,8 @@ case "$ANDROID_VERSION" in
         ;;
     4.2)
         RAMDISK="$ROOT/prebuilt/ramdisk-4.2.img"
-        RAMDISK_SHA256=""  # Will be set after downloading
+        # armeabi-v7a/ramdisk.img from armeabi-v7a-17_r06.zip
+        RAMDISK_SHA256="083839999806D2B04E94B422B7154A5E92B53D1564EB981D81FFF216EDA623F3"
         OVERLAY="$ROOT/initramfs-overlay-4.2"
         ;;
     2.2)
