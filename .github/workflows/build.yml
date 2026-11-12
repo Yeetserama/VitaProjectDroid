@@ -218,6 +218,8 @@ jobs:
             build/out/initramfs.cpio-4.2
             build/out/SHA256SUMS-4.2
             build/out/build-info.txt-4.2
+            prebuilt/system-4.2.img
+            prebuilt/userdata-4.2.img
 
   boot-package-2-2:
     if: github.event_name == 'workflow_dispatch' && (github.event.inputs.android_version == '2.2' || github.event.inputs.android_version == 'both') || (github.event_name == 'push' && github.ref == 'refs/heads/android-2.2')

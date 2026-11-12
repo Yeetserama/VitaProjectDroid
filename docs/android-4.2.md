@@ -41,7 +41,11 @@ The kernel config fragment is `kernel/config/vita-android-4.2.fragment`.
    ```
    This fetches the pinned `armeabi-v7a-17_r06.zip` (size and SHA1 are
    verified), extracts `ramdisk.img`, and creates a fresh 512 MiB ext4
-   `userdata.img`. It copies `ramdisk.img` to `prebuilt/ramdisk-4.2.img`.
+   `userdata.img`. Outputs:
+   - `prebuilt/ramdisk-4.2.img` (embedded in the initramfs)
+   - `prebuilt/system-4.2.img` (copy to `ur0:/android/system.img`)
+   - `prebuilt/userdata-4.2.img` (copy to `ur0:/android/userdata.img`)
+
    No Android SDK or `sdkmanager` installation is required.
 
 ### Build Commands
@@ -64,6 +68,8 @@ The build produces version-suffixed artifacts in `build/out/`:
 - `initramfs.cpio-4.2`
 - `SHA256SUMS-4.2`
 - `build-info.txt-4.2`
+- `system-4.2.img` (CI artifact copy of `prebuilt/system-4.2.img`)
+- `userdata-4.2.img` (CI artifact copy of `prebuilt/userdata-4.2.img`)
 
 ## Installation on Vita
 
@@ -76,9 +82,11 @@ The build produces version-suffixed artifacts in `build/out/`:
 
 2. Copy Android images to `ur0:/android/`:
    ```
-   system.img (from Android 4.2 SDK) -> ur0:/android/system.img
-   userdata.img (from Android 4.2 SDK) -> ur0:/android/userdata.img
+   system-4.2.img -> ur0:/android/system.img
+   userdata-4.2.img -> ur0:/android/userdata.img
    ```
+   The CI artifact `android-4.2.2-boot` contains both images. When building
+   locally they are `prebuilt/system-4.2.img` and `prebuilt/userdata-4.2.img`.
 
 3. Create `ur0:/android/wpa_supplicant.conf` for Wi-Fi.
 
@@ -135,6 +143,8 @@ androidonvita/
 ├── prebuilt/
 │   ├── ramdisk.img                    # 5.1 ramdisk
 │   ├── ramdisk-4.2.img                # 4.2 ramdisk (downloaded)
+│   ├── system-4.2.img                 # 4.2 system image (downloaded)
+│   ├── userdata-4.2.img               # fresh 512 MiB /data (created)
 │   └── busybox-armv7l
 ├── scripts/
 │   ├── build.sh                       # Main build (supports VERSION)
