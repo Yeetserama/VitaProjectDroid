@@ -40,21 +40,13 @@ static dev_t lowmem_dev;
 static struct class *lowmem_class;
 static struct device *lowmem_device;
 
-static int lowmem_shrink_scan(struct shrinker *shrink, struct shrink_control *sc)
-{
-	return 0;
-}
-
-static unsigned long lowmem_shrink_count(struct shrinker *shrink, struct shrink_control *sc)
-{
-	return 0;
-}
-
-static struct shrinker lowmem_shrinker = {
-	.count_objects = lowmem_shrink_count,
-	.scan_objects = lowmem_shrink_scan,
-	.seeks = DEFAULT_SEEKS * 4,
-};
+/*
+ * This driver is a compatibility stub: Android 4.x and earlier write the
+ * lowmemorykiller tunables and expect the driver to exist.  The old staging
+ * shrinker used register_shrinker(), which Linux 6.12 replaced with the
+ * shrinker_alloc()/shrinker_register() API.  Registering an empty shrinker
+ * has no effect, so it is intentionally not registered here.
+ */
 
 static int lowmem_write(struct file *file, const char __user *buf,
 			size_t count, loff_t *ppos)
@@ -170,7 +162,7 @@ static int __init lowmemorykiller_init(void)
 		lowmem_minfree[i] = default_minfree[i];
 	}
 
-	lowmem_class = class_create(THIS_MODULE, "lowmemorykiller");
+	lowmem_class = class_create("lowmemorykiller");
 	if (IS_ERR(lowmem_class)) {
 		ret = PTR_ERR(lowmem_class);
 		goto err_free;
@@ -192,8 +184,6 @@ static int __init lowmemorykiller_init(void)
 		goto err_cdev;
 	}
 
-	register_shrinker(&lowmem_shrinker);
-
 	pr_info("initialized with %d adj slots\n", lowmem_adj_count);
 	return 0;
 
@@ -211,7 +201,6 @@ err_free:
 
 static void __exit lowmemorykiller_exit(void)
 {
-	unregister_shrinker(&lowmem_shrinker);
 	device_destroy(lowmem_class, lowmem_dev);
 	cdev_del(&lowmem_cdev);
 	unregister_chrdev_region(lowmem_dev, 1);

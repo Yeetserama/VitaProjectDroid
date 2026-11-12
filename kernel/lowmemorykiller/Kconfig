@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0
+# See kernel/logger/Kconfig: the ANDROID symbol is gone in 6.12, so the
+# fragments opt in explicitly.
 config ANDROID_LOW_MEMORY_KILLER
 	tristate "Android lowmemorykiller"
-	depends on ANDROID
-	default y if ANDROID
+	default n
 	help
 	  This is the Android lowmemorykiller driver. It monitors memory usage
 	  and kills processes when memory is low, based on their oom_adj scores.
