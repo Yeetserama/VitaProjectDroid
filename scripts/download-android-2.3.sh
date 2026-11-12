@@ -107,7 +107,7 @@ grep -q '^ro.build.version.sdk=10$' "$EXTRACT/build.prop" \
     || die "$EXTRACT/build.prop is not SDK 10"
 grep -q '^ro.build.version.release=2\.3' "$EXTRACT/build.prop" \
     || die "$EXTRACT/build.prop is not Android 2.3.x"
-python3 - "$EXTRACT/system.img" "$EXTRACT/userdata.img" <<'EOF'
+python3 - "$EXTRACT/system.img" <<'EOF'
 import sys
 
 # ext4 superblock magic lives at 1024 + 0x38.
@@ -127,24 +127,19 @@ echo "==> installing system image as $OUT_DIR/system-2.3.img"
 cp "$EXTRACT/system.img" "$OUT_DIR/system-2.3.img"
 
 USERDATA="$OUT_DIR/userdata-2.3.img"
-if command -v mke2fs >/dev/null 2>&1 && command -v truncate >/dev/null 2>&1; then
-    # A fresh image avoids rewriting the 2 GiB SDK blob and gives the Vita a
-    # small /data.  Gingerbread creates its directory tree on first boot.
-    echo "==> creating a fresh ${USERDATA_MB} MiB ext4 userdata image"
-    rm -f "$USERDATA"
-    truncate -s "${USERDATA_MB}M" "$USERDATA"
-    mke2fs -q -t ext4 -F -L userdata "$USERDATA" \
-        || die "mke2fs failed (install e2fsprogs)"
-elif command -v resize2fs >/dev/null 2>&1 && command -v truncate >/dev/null 2>&1; then
-    echo "==> shrinking SDK userdata.img to ${USERDATA_MB} MiB"
-    cp "$EXTRACT/userdata.img" "$USERDATA"
-    e2fsck -f -y "$USERDATA" >/dev/null 2>&1 || true
-    resize2fs "$USERDATA" "${USERDATA_MB}M"
-    truncate -s "${USERDATA_MB}M" "$USERDATA"
-    e2fsck -f -y "$USERDATA" || true
-else
-    die "mke2fs/resize2fs not found; install e2fsprogs to create userdata-2.3.img"
-fi
+command -v mke2fs >/dev/null 2>&1 \
+    || die "mke2fs not found; install e2fsprogs to create userdata-2.3.img"
+command -v truncate >/dev/null 2>&1 \
+    || die "truncate not found; install coreutils to create userdata-2.3.img"
+
+# A fresh image avoids extracting and rewriting the SDK's 2 GiB blob, and
+# gives the Vita a small /data.  Gingerbread creates its directory tree on
+# first boot.
+echo "==> creating a fresh ${USERDATA_MB} MiB ext4 userdata image"
+rm -f "$USERDATA"
+truncate -s "${USERDATA_MB}M" "$USERDATA"
+mke2fs -q -t ext4 -F -L userdata "$USERDATA" \
+    || die "mke2fs failed (install e2fsprogs)"
 
 echo "==> verifying outputs"
 ls -l "$OUT_DIR/ramdisk-2.3.img" "$OUT_DIR/system-2.3.img" "$USERDATA"
