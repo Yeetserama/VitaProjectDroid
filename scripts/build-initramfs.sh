@@ -137,29 +137,41 @@ mkdir -p "$STAGE/lib"
 cp -a "$VENDOR/lib/firmware" "$STAGE/lib/"
 
 echo "==> checking required files"
-for path in \
-    "$STAGE/init" \
-    "$STAGE/init.vita" \
-    "$STAGE/init.vita.rc" \
-    "$STAGE/fstab.vita" \
-    "$STAGE/ueventd.vita.rc" \
-    "$STAGE/default.prop" \
-    "$STAGE/vita-log.sh" \
-    "$STAGE/bin/sh" \
-    "$STAGE/sbin/busybox" \
-    "$STAGE/sbin/adbd" \
-    "$STAGE/sbin/healthd" \
-    "$STAGE/sbin/ueventd" \
-    "$STAGE/sepolicy" \
-    "$STAGE/property_contexts" \
-    "$STAGE/usr/keylayout/PlayStation_Vita_Buttons__Syscon_.kl" \
-    "$STAGE/usr/idc/PlayStation_Vita_Touchscreen__Syscon_.idc" \
-    "$STAGE/vita-linux/usr/sbin/wpa_supplicant" \
-    "$STAGE/vita-linux/lib/ld-linux-armhf.so.3" \
-    "$STAGE/vita-linux/usr/lib/libssl.so.3" \
-    "$STAGE/vita-linux/usr/lib/libcrypto.so.3" \
-    "$STAGE/lib/firmware/mrvl/sd8787_uapsta.bin" \
-    "$STAGE/lib/firmware/regulatory.db"; do
+REQUIRED_FILES="
+    $STAGE/init
+    $STAGE/init.vita
+    $STAGE/init.vita.rc
+    $STAGE/fstab.vita
+    $STAGE/ueventd.vita.rc
+    $STAGE/default.prop
+    $STAGE/vita-log.sh
+    $STAGE/bin/sh
+    $STAGE/sbin/busybox
+    $STAGE/sbin/adbd
+    $STAGE/sbin/ueventd
+    $STAGE/usr/keylayout/PlayStation_Vita_Buttons__Syscon_.kl
+    $STAGE/usr/idc/PlayStation_Vita_Touchscreen__Syscon_.idc
+    $STAGE/vita-linux/usr/sbin/wpa_supplicant
+    $STAGE/vita-linux/lib/ld-linux-armhf.so.3
+    $STAGE/vita-linux/usr/lib/libssl.so.3
+    $STAGE/vita-linux/usr/lib/libcrypto.so.3
+    $STAGE/lib/firmware/mrvl/sd8787_uapsta.bin
+    $STAGE/lib/firmware/regulatory.db
+"
+case "$ANDROID_VERSION" in
+    5.1)
+        REQUIRED_FILES="$REQUIRED_FILES
+    $STAGE/sbin/healthd
+    $STAGE/sepolicy
+    $STAGE/property_contexts
+"
+        ;;
+    *)
+        # Android 4.2 predates healthd (4.4) and SELinux (4.3); its SDK
+        # ramdisk ships none of those files.
+        ;;
+esac
+for path in $REQUIRED_FILES; do
     # Use -L as well: bin/sh is an absolute symlink to /sbin/busybox, and -e
     # on the build host would follow it into the host's own root filesystem.
     [ -e "$path" ] || [ -L "$path" ] || die "missing required initramfs file: ${path#"$STAGE"/}"
