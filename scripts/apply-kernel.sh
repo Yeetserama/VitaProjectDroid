@@ -7,7 +7,7 @@
 # Environment:
 #   CROSS_COMPILE   default arm-linux-gnueabihf-
 #   JOBS            default nproc
-#   ANDROID_VERSION 5.1 or 4.2 (default 5.1)
+#   ANDROID_VERSION 5.1, 4.2 or 2.3 (default 5.1)
 
 set -euo pipefail
 
@@ -15,7 +15,7 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 KERNEL_SRC=${1:-"$ROOT/build/linux_vita"}
 INITRAMFS=${2:-"$ROOT/build/initramfs.cpio"}
 OUT=${3:-"$ROOT/build/out"}
-ANDROID_VERSION=${4:-"5.1"}
+ANDROID_VERSION=${ANDROID_VERSION:-${4:-"5.1"}}
 
 CROSS_COMPILE=${CROSS_COMPILE:-arm-linux-gnueabihf-}
 JOBS=${JOBS:-$(nproc 2>/dev/null || echo 4)}
@@ -32,10 +32,13 @@ case "$ANDROID_VERSION" in
         FRAGMENT="$ROOT/kernel/config/vita-android-4.2.fragment"
         LOCALVERSION="-vita-android-4.2"
         ;;
-    2.2)
+    2.3)
+        # Gingerbread predates SELinux (Android 4.3), so no androidboot.selinux
+        # on the command line.  This also keeps the kernel from selecting a
+        # default LSM the userspace cannot label for.
         BOOTARGS="earlyprintk keep_bootcon console=tty0 console=ttyS0,115200 androidboot.hardware=vita androidboot.console=tty0 androidboot.serialno=PCH1000 rdinit=/init.vita"
-        FRAGMENT="$ROOT/kernel/config/vita-android-2.2.fragment"
-        LOCALVERSION="-vita-android-2.2"
+        FRAGMENT="$ROOT/kernel/config/vita-android-2.3.fragment"
+        LOCALVERSION="-vita-android-2.3"
         ;;
     *)
         echo "apply-kernel: unknown Android version: $ANDROID_VERSION" >&2
@@ -128,7 +131,8 @@ make -C "$KERNEL_SRC" ARCH="$ARCH" CROSS_COMPILE="$CROSS_COMPILE" olddefconfig
 make -C "$KERNEL_SRC" ARCH="$ARCH" CROSS_COMPILE="$CROSS_COMPILE" olddefconfig
 
 echo "==> checking required kernel configuration"
-# Base symbols required for both versions
+# Base symbols required for every version.  SELinux is deliberately not here:
+# it only exists from Android 4.3 onward, so Gingerbread requires it absent.
 for sym in \
     CONFIG_ASHMEM \
     CONFIG_ANDROID_BINDER_IPC \
@@ -149,8 +153,6 @@ for sym in \
     CONFIG_INPUT_UINPUT \
     CONFIG_MWIFIEX \
     CONFIG_MWIFIEX_SDIO \
-    CONFIG_SECURITY_SELINUX \
-    CONFIG_SECURITY_SELINUX_DEVELOP \
     CONFIG_SW_SYNC \
     CONFIG_SYNC_FILE \
     CONFIG_TMPFS \
@@ -162,19 +164,24 @@ done
 # Version-specific symbols
 case "$ANDROID_VERSION" in
     4.2)
-        for sym in CONFIG_LOG CONFIG_ANDROID_LOW_MEMORY_KILLER; do
+        for sym in CONFIG_LOG CONFIG_ANDROID_LOW_MEMORY_KILLER \
+                   CONFIG_SECURITY_SELINUX CONFIG_SECURITY_SELINUX_DEVELOP; do
             require_symbol "$sym"
         done
         ;;
-    2.2)
+    2.3)
         for sym in CONFIG_LOG CONFIG_ANDROID_LOW_MEMORY_KILLER; do
             require_symbol "$sym"
         done
-        # 2.2 has no SELinux
+        # Gingerbread has no SELinux support in userspace or its ramdisk.
         require_absent CONFIG_SECURITY_SELINUX
         require_absent CONFIG_SECURITY_SELINUX_DEVELOP
+        require_absent CONFIG_SECURITY_SELINUX_BOOTPARAM
         ;;
     5.1)
+        for sym in CONFIG_SECURITY_SELINUX CONFIG_SECURITY_SELINUX_DEVELOP; do
+            require_symbol "$sym"
+        done
         # 5.1 uses userspace logd and lmkd
         ;;
 esac
@@ -193,8 +200,20 @@ require_absent CONFIG_CFG80211_DEFAULT_PS
 
 grep -q '^CONFIG_INITRAMFS_SOURCE="vita-initramfs.cpio"$' "$KERNEL_SRC/.config" \
     || die "CONFIG_INITRAMFS_SOURCE was not set"
-grep -q '^CONFIG_LSM=".*selinux' "$KERNEL_SRC/.config" \
-    || die "SELinux is not in CONFIG_LSM"
+case "$ANDROID_VERSION" in
+    2.3)
+        # The 2.3 fragment ships an explicit LSM list without selinux; if the
+        # old fragment entry survived a merge, catch it here rather than at
+        # boot when Android init cannot load a policy.
+        if grep -q '^CONFIG_LSM=".*selinux' "$KERNEL_SRC/.config"; then
+            die "SELinux is in CONFIG_LSM, but Gingerbread has no policy"
+        fi
+        ;;
+    *)
+        grep -q '^CONFIG_LSM=".*selinux' "$KERNEL_SRC/.config" \
+            || die "SELinux is not in CONFIG_LSM"
+        ;;
+esac
 grep -q '^CONFIG_ANDROID_BINDER_DEVICES="binder' "$KERNEL_SRC/.config" \
     || die "CONFIG_ANDROID_BINDER_DEVICES was not set"
 
@@ -211,7 +230,7 @@ echo "==> collecting artifacts"
 VERSION_SUFFIX=""
 case "$ANDROID_VERSION" in
     4.2) VERSION_SUFFIX="-4.2" ;;
-    2.2) VERSION_SUFFIX="-2.2" ;;
+    2.3) VERSION_SUFFIX="-2.3" ;;
     5.1) VERSION_SUFFIX="" ;;
 esac
 
@@ -223,8 +242,8 @@ cp "$INITRAMFS" "$OUT/initramfs.cpio${VERSION_SUFFIX}"
 command -v fdtput >/dev/null 2>&1 || die "fdtput not found (install device-tree-compiler)"
 fdtput -t s "$OUT/vita.dtb${VERSION_SUFFIX}" /chosen bootargs "$BOOTARGS"
 
-# Android 2.2 has no SELinux, so no need for selinux-disabled DTB
-if [ "$ANDROID_VERSION" != "2.2" ]; then
+# Gingerbread has no SELinux, so there is no second DTB variant.
+if [ "$ANDROID_VERSION" != "2.3" ]; then
     cp "$OUT/vita.dtb${VERSION_SUFFIX}" "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}"
     fdtput -t s "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /chosen bootargs \
         "${BOOTARGS/androidboot.selinux=permissive/androidboot.selinux=disabled}"
@@ -245,7 +264,7 @@ fi
     echo
     echo "bootargs (vita.dtb):"
     echo "$BOOTARGS"
-    if [ "$ANDROID_VERSION" != "2.2" ]; then
+    if [ "$ANDROID_VERSION" != "2.3" ]; then
         echo
         echo "bootargs (vita-selinux-disabled.dtb):"
         echo "${BOOTARGS/androidboot.selinux=permissive/androidboot.selinux=disabled}"
@@ -254,7 +273,7 @@ fi
 
 (
     cd "$OUT"
-    if [ "$ANDROID_VERSION" = "2.2" ]; then
+    if [ "$ANDROID_VERSION" = "2.3" ]; then
         sha256sum zImage${VERSION_SUFFIX} vita.dtb${VERSION_SUFFIX} vita1000.dtb${VERSION_SUFFIX} initramfs.cpio${VERSION_SUFFIX} > SHA256SUMS${VERSION_SUFFIX}
     else
         sha256sum zImage${VERSION_SUFFIX} vita.dtb${VERSION_SUFFIX} vita1000.dtb${VERSION_SUFFIX} vita-selinux-disabled.dtb${VERSION_SUFFIX} initramfs.cpio${VERSION_SUFFIX} > SHA256SUMS${VERSION_SUFFIX}

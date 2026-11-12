@@ -1,6 +1,7 @@
 #!/system/bin/sh
 # Bring up the SD8787 Wi-Fi using the glibc wpa_supplicant bundled in the
-# initramfs at /vita-linux.  Runs as a oneshot late_start service.
+# initramfs at /vita-linux.  Runs as a oneshot default-class service after
+# Android init has mounted /system and /data.
 
 PATH=/bin:/system/bin:/system/xbin
 export PATH
@@ -138,7 +139,7 @@ console_banner() {
     banner_ip=$(iface_ip)
     {
         echo
-        echo "Android 2.2 (Froyo) on PS Vita (headless)"
+        echo "Android 2.3.7 (Gingerbread) on PS Vita (headless)"
         echo "Wi-Fi: ${banner_ip:-no lease} via $IFACE  gateway: $(getprop "dhcp.$IFACE.gateway" 2>/dev/null)"
         echo "adb connect ${banner_ip:-<vita-ip>}:$(getprop service.adb.tcp.port 2>/dev/null)"
         echo
@@ -481,7 +482,7 @@ mkdir -p "$UR0" 2>/dev/null
 
 : > "$LOG"
 : > "$UR0_LOG" 2>/dev/null
-log "starting (Android 2.2 Froyo)"
+log "starting (Android 2.3.7 Gingerbread)"
 log "adbd tcp port: $(getprop service.adb.tcp.port 2>/dev/null)"
 
 if [ ! -f "$CONF" ]; then

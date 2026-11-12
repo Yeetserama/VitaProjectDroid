@@ -2,10 +2,9 @@
 # Assemble the Android initramfs for the Vita.
 #
 # Inputs:
-#   prebuilt/ramdisk.img        stock Android ramdisk (gzip cpio)
+#   prebuilt/ramdisk-2.3.img    stock Android 2.3.7 ramdisk (gzip cpio)
 #   prebuilt/busybox-armv7l     static ARM busybox used by /init.vita
-#   initramfs-overlay/          Vita-specific init, fstab, input files (5.1)
-#   initramfs-overlay-4.2/      Vita-specific init, fstab, input files (4.2)
+#   initramfs-overlay-2.3/      Vita-specific init, fstab, input files
 #   vendor/vita-linux/          glibc wpa_supplicant + firmware
 #
 # Output:
@@ -14,30 +13,21 @@
 #
 # Usage:
 #   scripts/build-initramfs.sh [OUTPUT.cpio] [STAGING_DIR] [ANDROID_VERSION]
-#   ANDROID_VERSION: 5.1 or 4.2 (default 5.1)
+#   ANDROID_VERSION: 2.3 (default)
 
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 OUT=${1:-"$ROOT/build/initramfs.cpio"}
 STAGE=${2:-"$ROOT/build/initramfs-root"}
-ANDROID_VERSION=${3:-"5.1"}
+ANDROID_VERSION=${3:-"2.3"}
 
 case "$ANDROID_VERSION" in
-    5.1)
-        RAMDISK="$ROOT/prebuilt/ramdisk.img"
-        RAMDISK_SHA256="293F60C1DC08ADFCDFBF2FE4C37F73AB4B75C5A84A9CC25F15001878630715DD"
-        OVERLAY="$ROOT/initramfs-overlay"
-        ;;
-    4.2)
-        RAMDISK="$ROOT/prebuilt/ramdisk-4.2.img"
-        RAMDISK_SHA256=""  # Will be set after downloading
-        OVERLAY="$ROOT/initramfs-overlay-4.2"
-        ;;
-    2.2)
-        RAMDISK="$ROOT/prebuilt/ramdisk-2.2.img"
-        RAMDISK_SHA256=""  # Will be set after downloading
-        OVERLAY="$ROOT/initramfs-overlay-2.2"
+    2.3)
+        RAMDISK="$ROOT/prebuilt/ramdisk-2.3.img"
+        # api 10 r05, armeabi-v7a/ramdisk.img from armeabi-v7a-10_r05.zip
+        RAMDISK_SHA256="94DB377C1EE8D79DBD8BF9570D12B18FB7C14BB8829F6FE793D77C5E7F05619D"
+        OVERLAY="$ROOT/initramfs-overlay-2.3"
         ;;
     *)
         echo "build-initramfs: unknown Android version: $ANDROID_VERSION" >&2
@@ -76,7 +66,7 @@ command -v python3 >/dev/null 2>&1 || die "python3 is required"
 [ -d "$OVERLAY" ] || die "missing $OVERLAY"
 [ -d "$VENDOR" ] || die "missing $VENDOR"
 
-# Only check SHA256 if known (5.1 has a pinned hash)
+# The 2.3 ramdisk hash is pinned to the exact api-10 r05 SDK archive.
 if [ -n "$RAMDISK_SHA256" ]; then
     check_sha256 "$RAMDISK" "$RAMDISK_SHA256"
 fi
@@ -88,20 +78,35 @@ mkdir -p "$STAGE"
 python3 "$ROOT/scripts/unpack_cpio.py" "$RAMDISK" "$STAGE"
 
 # The Vita never runs on goldfish/ranchu.  Removing these also prevents a
-# stale fstab or ueventd rule from being picked up by accident.
+# stale fstab or ueventd rule from being picked up by accident.  The 2.3 SDK
+# ramdisk names its vold configs vold.fstab.goldfish / vold.fstab.ranchu.
 rm -f \
     "$STAGE/init.goldfish.rc" \
     "$STAGE/init.ranchu.rc" \
     "$STAGE/ueventd.goldfish.rc" \
     "$STAGE/ueventd.ranchu.rc" \
     "$STAGE/fstab.goldfish" \
-    "$STAGE/fstab.ranchu"
+    "$STAGE/fstab.ranchu" \
+    "$STAGE/vold.fstab.goldfish" \
+    "$STAGE/vold.fstab.ranchu"
 
 [ -x "$STAGE/init" ] || die "Android init missing from ramdisk"
 [ -x "$STAGE/sbin/adbd" ] || die "adbd missing from ramdisk"
 
 echo "==> adding Vita overlay for Android ${ANDROID_VERSION}"
 cp -a "$OVERLAY/." "$STAGE/"
+
+# Android 2.3's ueventd derives the hardware suffix from /proc/cpuinfo, not
+# from androidboot.hardware, so it would never read /ueventd.vita.rc on the
+# Vita.  Append the Vita rules to the stock /ueventd.rc, which ueventd always
+# loads (later entries take precedence in its reverse lookup).
+[ -f "$STAGE/ueventd.rc" ] || die "stock ueventd.rc missing from the 2.3 ramdisk"
+{
+    echo
+    echo "# --- Vita additions (appended by build-initramfs.sh) ---"
+    cat "$OVERLAY/ueventd.vita.rc"
+} >> "$STAGE/ueventd.rc"
+rm -f "$STAGE/ueventd.vita.rc"
 
 # A Git checkout on Windows does not preserve execute bits.  Restore them here
 # so the checks below do not fail on an otherwise correct tree.
@@ -132,21 +137,23 @@ mkdir -p "$STAGE/lib"
 cp -a "$VENDOR/lib/firmware" "$STAGE/lib/"
 
 echo "==> checking required files"
-# Base required files for all versions
-BASE_FILES="
+# Gingerbread has no SELinux, no healthd and no property_contexts.  Its
+# EventHub reads key layouts from /system/usr/keylayout only (there is no
+# /data/system/devices fallback yet), so the Vita KL/IDC files are not part of
+# this initramfs.
+REQUIRED_FILES="
     $STAGE/init
     $STAGE/init.vita
     $STAGE/init.vita.rc
     $STAGE/fstab.vita
-    $STAGE/ueventd.vita.rc
+    $STAGE/ueventd.rc
     $STAGE/default.prop
+    $STAGE/egl.cfg.vita
     $STAGE/vita-log.sh
     $STAGE/bin/sh
     $STAGE/sbin/busybox
     $STAGE/sbin/adbd
     $STAGE/sbin/ueventd
-    $STAGE/usr/keylayout/PlayStation_Vita_Buttons__Syscon_.kl
-    $STAGE/usr/idc/PlayStation_Vita_Touchscreen__Syscon_.idc
     $STAGE/vita-linux/usr/sbin/wpa_supplicant
     $STAGE/vita-linux/lib/ld-linux-armhf.so.3
     $STAGE/vita-linux/usr/lib/libssl.so.3
@@ -154,24 +161,12 @@ BASE_FILES="
     $STAGE/lib/firmware/mrvl/sd8787_uapsta.bin
     $STAGE/lib/firmware/regulatory.db"
 
-# Version-specific required files
-case "$ANDROID_VERSION" in
-    2.2)
-        # 2.2 has no SELinux, no healthd in same way
-        REQUIRED_FILES="$BASE_FILES"
-        ;;
-    *)
-        # 4.2 and 5.1 have SELinux
-        REQUIRED_FILES="$BASE_FILES
-        $STAGE/sbin/healthd
-        $STAGE/sepolicy
-        $STAGE/property_contexts"
-        ;;
-esac
-
 for path in $REQUIRED_FILES; do
     [ -e "$path" ] || [ -L "$path" ] || die "missing required initramfs file: ${path#"$STAGE"/}"
 done
+
+grep -q '^/dev/logger/log_main' "$STAGE/ueventd.rc" \
+    || die "Vita ueventd rules were not appended to /ueventd.rc"
 
 [ -x "$STAGE/init.vita" ] || die "init.vita is not executable"
 [ -x "$STAGE/vita-log.sh" ] || die "vita-log.sh is not executable"

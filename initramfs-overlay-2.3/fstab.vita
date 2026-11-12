@@ -1,0 +1,13 @@
+# Android fstab reference for the PlayStation Vita (Android 2.3 Gingerbread).
+#
+# Gingerbread's init does not implement `mount_all`; /init.vita.rc mounts
+# /data and /cache explicitly.  This file is kept for documentation and for a
+# future fs_mgr conversion.
+#
+# <src>              <mnt_point>  <type>  <mnt_flags and options>                              <fs_mgr_flags>
+#
+# system.img is attached to loop0 and mounted read-only by /init.vita.
+# userdata.img is attached to loop1.
+/dev/block/loop0     /system      ext4    ro,barrier=1                                         wait
+/dev/block/loop1     /data        ext4    noatime,nosuid,nodev,barrier=1,noauto_da_alloc      wait
+tmpfs                /cache       tmpfs   rw,nosuid,nodev,noatime,mode=0755,size=64m          defaults

@@ -1,0 +1,112 @@
+# Android 2.3.7 (Gingerbread) platform init for the PlayStation Vita (PCH-1000).
+#
+# init parses /init.rc and then /init.${ro.hardware}.rc automatically, so this
+# file is loaded because the kernel command line has androidboot.hardware=vita.
+# It is parsed after init.rc, but every `on init` command still runs before the
+# `on boot` action that does `class_start default`.
+
+on init
+    # Gingerbread's init.rc exports /mnt/sdcard itself.  Keep the value aligned
+    # with the SDK image's storage_list.xml (unlike the 4.2/5.1 images, which
+    # use /storage/sdcard).
+    export EXTERNAL_STORAGE /mnt/sdcard
+
+    # debugfs for tracing
+    mkdir /sys/kernel/debug 0755 root root
+    mount debugfs debugfs /sys/kernel/debug
+
+    # The backported logger driver creates /dev/logger/*; Gingerbread's liblog
+    # opens /dev/log/*.  This `on init` action runs after Android init has
+    # replaced /dev with a fresh tmpfs, so the symlinks must be created here
+    # (anything /init.vita creates is discarded).  ueventd coldboot installs
+    # the /dev/logger/* targets before this action runs.
+    mkdir /dev/log 0755 root log
+    symlink /dev/logger/log_main /dev/log/main
+    symlink /dev/logger/log_radio /dev/log/radio
+    symlink /dev/logger/log_events /dev/log/events
+    symlink /dev/logger/log_system /dev/log/system
+
+    # /cache is not in the SDK ramdisk.  Create it before `on fs` mounts tmpfs.
+    mkdir /cache 0770 system cache
+
+    # Headless bring-up gate.  `stop` on a service that has not started yet
+    # sets SVC_DISABLED, so the later `class_start default` in init.rc skips
+    # it.  `on property:vita.ui=1` clears that flag again.
+    #
+    # SurfaceFlinger is instantiated by system_server on Gingerbread (there is
+    # no surfaceflinger init service), but AudioFlinger, MediaPlayerService,
+    # CameraService and AudioPolicyService live in the `media` service
+    # (mediaserver).  system_server only starts those itself on the emulator,
+    # where binder reports !supportsProcesses(), so start media before zygote
+    # or AudioService blocks.
+    stop zygote
+    stop media
+    stop bootanim
+    stop ril-daemon
+    stop dbus
+    stop bluetoothd
+    stop hfag
+    stop hsag
+    stop opush
+    stop pbap
+    stop racoon
+    stop mtpd
+
+on fs
+    # /system is already mounted read-only by /init.vita (it needs to bind the
+    # software EGL config over the SDK image).  Only the remaining filesystems
+    # are mounted here.
+    mount ext4 /dev/loop1 /data nosuid nodev
+    mount tmpfs tmpfs /cache mode=0755,size=64m
+
+on boot
+    # Android's own `on init` sets loglevel 3, which hides init/service and
+    # vita-net progress from the framebuffer.  This is a headless bring-up
+    # image, so raise it again for the rest of the boot: the console is the
+    # only live output until adb is reachable.  boot.log keeps everything
+    # regardless.
+    loglevel 7
+
+    # adb over TCP is the only usable debug transport on this port.  Start it
+    # only now, after /system is mounted: /sbin/adbd links against bionic.
+    start adbd
+
+    # The framebuffer is exposed through the kernel's "graphics" class, which
+    # ueventd maps to /dev/graphics/fb0.  SurfaceFlinger's fbdev path needs it
+    # to be writable by the graphics group.  init builtins take arguments
+    # directly (there is no shell), so no redirections here.
+    chmod 0660 /dev/graphics/fb0
+    chown root graphics /dev/graphics/fb0
+
+    write /proc/sys/vm/swappiness 100
+
+# `adb shell setprop vita.ui 1` (or touch ur0:/android/ui and reboot) turns the
+# framework on after the core services are up.  Start media before zygote so
+# the audio services are published before system_server reaches AudioService.
+on property:vita.ui=1
+    start media
+    start zygote
+
+# Keep a synced kernel-log snapshot on ur0.  Android init sets panic_on_oops=1,
+# so a kernel oops or a critical-service crash loop can reset the Vita at any
+# moment; an unsynced exFAT snapshot does not survive that.  The script
+# snapshots every 2 s for two minutes, then every 30 s for ten more minutes and
+# exits.
+service vita-log /system/bin/sh /vita-log.sh
+    class default
+    user root
+    group root system
+    oneshot
+
+# Wi-Fi and the optional UI marker.  Gingerbread has no late_start class, so
+# these use the default class and run after mount_all equivalent above.
+service vita-ui /system/bin/sh /vita-ui.sh
+    class default
+    user root
+    oneshot
+
+service vita-net /system/bin/sh /vita-net.sh
+    class default
+    user root
+    group root net_admin net_raw wifi
+    oneshot

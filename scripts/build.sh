@@ -13,35 +13,17 @@
 #
 # Usage:
 #   scripts/build.sh [ANDROID_VERSION]
-#   ANDROID_VERSION=4.2 scripts/build.sh
+#   ANDROID_VERSION=2.3 scripts/build.sh
 #   KERNEL_SRC=/path/to/linux_vita scripts/build.sh
 #   CLEAN=1 scripts/build.sh
 #
-# Artifacts (for 5.1):
-#   build/out/zImage
-#   build/out/vita.dtb                     (permissive SELinux)
-#   build/out/vita-selinux-disabled.dtb    (fallback)
-#   build/out/vita1000.dtb                 (unpatched, for reference)
-#   build/out/initramfs.cpio
-#   build/out/SHA256SUMS
-#   build/out/build-info.txt
-#
-# Artifacts (for 4.2):
-#   build/out/zImage-4.2
-#   build/out/vita.dtb-4.2
-#   build/out/vita-selinux-disabled.dtb-4.2
-#   build/out/vita1000.dtb-4.2
-#   build/out/initramfs.cpio-4.2
-#   build/out/SHA256SUMS-4.2
-#   build/out/build-info.txt-4.2
-#
-# Artifacts (for 2.2):
-#   build/out/zImage-2.2
-#   build/out/vita.dtb-2.2
-#   build/out/vita1000.dtb-2.2
-#   build/out/initramfs.cpio-2.2
-#   build/out/SHA256SUMS-2.2
-#   build/out/build-info.txt-2.2
+# Artifacts (for 2.3 Gingerbread):
+#   build/out/zImage-2.3
+#   build/out/vita.dtb-2.3
+#   build/out/vita1000.dtb-2.3
+#   build/out/initramfs.cpio-2.3
+#   build/out/SHA256SUMS-2.3
+#   build/out/build-info.txt-2.3
 
 set -euo pipefail
 
@@ -50,22 +32,18 @@ BUILD_DIR=${BUILD_DIR:-"$ROOT/build"}
 KERNEL_REF="a33b819fd7174f60b1d5bcb613de565b3f046687"
 KERNEL_URL="https://github.com/incognitojam/linux_vita/archive/${KERNEL_REF}.tar.gz"
 KERNEL_SRC=${KERNEL_SRC:-"$BUILD_DIR/linux_vita"}
-ANDROID_VERSION=${1:-"5.1"}
+# Priority: env var > argument > default.  CI sets ANDROID_VERSION in the
+# environment; a bare `scripts/build.sh 2.3` argument path also works.
+ANDROID_VERSION=${ANDROID_VERSION:-${1:-"2.3"}}
+
+echo "build.sh: ANDROID_VERSION=$ANDROID_VERSION"
+echo "build.sh: ROOT=$ROOT"
+echo "build.sh: BUILD_DIR=$BUILD_DIR"
 
 case "$ANDROID_VERSION" in
-    5.1)
-        INITRAMFS="$BUILD_DIR/initramfs.cpio"
-        STAGE="$BUILD_DIR/initramfs-root"
-        OUT="$BUILD_DIR/out"
-        ;;
-    4.2)
-        INITRAMFS="$BUILD_DIR/initramfs.cpio-4.2"
-        STAGE="$BUILD_DIR/initramfs-root-4.2"
-        OUT="$BUILD_DIR/out"
-        ;;
-    2.2)
-        INITRAMFS="$BUILD_DIR/initramfs.cpio-2.2"
-        STAGE="$BUILD_DIR/initramfs-root-2.2"
+    2.3)
+        INITRAMFS="$BUILD_DIR/initramfs.cpio-2.3"
+        STAGE="$BUILD_DIR/initramfs-root-2.3"
         OUT="$BUILD_DIR/out"
         ;;
     *)

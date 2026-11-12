@@ -1,4 +1,5 @@
-# Android 2.2 (Froyo, API 8) bring-up additions for the PlayStation Vita (PCH-1000).
+# Android 2.3.7 (Gingerbread, API 10) bring-up additions for the
+# PlayStation Vita (PCH-1000).
 #
 # Merged on top of arch/arm/configs/vita_defconfig with
 # scripts/kconfig/merge_config.sh.  CONFIG_MODULES is off in the Vita
@@ -7,11 +8,12 @@
 # Key differences from Android 4.2/5.1:
 # - Dalvik VM only (no ART)
 # - No SELinux (added in Android 4.3)
-# - Uses kernel logger (CONFIG_LOG) and lowmemorykiller (CONFIG_ANDROID_LOW_MEMORY_KILLER)
-# - Older binder ABI (protocol 7 but different ioctl interface)
-# - yaffs2 filesystem support for system/data (though we use ext4 via loop)
-# - Simpler init system
-# - No surfaceflinger in the same way (SurfaceFlinger exists but simpler)
+# - Uses kernel logger (CONFIG_LOG) and lowmemorykiller
+#   (CONFIG_ANDROID_LOW_MEMORY_KILLER)
+# - Older binder ABI: 32-bit, protocol 7 (BINDER_IPC_32BIT)
+# - The SDK system/userdata images are ext4; they are loop-mounted from ur0
+# - Simpler init system; SurfaceFlinger is instantiated by system_server and
+#   AudioFlinger lives in the mediaserver process
 
 # ---------------------------------------------------------------------------
 # Core Android IPC / shared memory
@@ -29,11 +31,10 @@ CONFIG_SW_SYNC=y
 
 # ---------------------------------------------------------------------------
 # Kernel logger (removed in Linux 6.12, backported from 4.19)
-# Android 2.2 uses /dev/log kernel interface
+# Android 2.3's liblog opens /dev/log/*; /init.vita creates compatibility
+# symlinks to the driver's /dev/logger/* nodes.
 # ---------------------------------------------------------------------------
 CONFIG_LOG=y
-CONFIG_LOG_BUFFER_SIZE=128
-CONFIG_LOG_CPU_MAX_BUF_SIZE=128
 
 # ---------------------------------------------------------------------------
 # Low Memory Killer (removed in Linux 6.12, backported from 4.19)
@@ -41,7 +42,7 @@ CONFIG_LOG_CPU_MAX_BUF_SIZE=128
 CONFIG_ANDROID_LOW_MEMORY_KILLER=y
 
 # ---------------------------------------------------------------------------
-# cgroups: Android 2.2 init uses basic cgroups
+# cgroups: Android 2.3 init uses basic cgroups
 # ---------------------------------------------------------------------------
 CONFIG_CGROUPS=y
 CONFIG_MEMCG=y
@@ -95,9 +96,11 @@ CONFIG_LZ4_COMPRESS=y
 CONFIG_LZ4_DECOMPRESS=y
 
 # ---------------------------------------------------------------------------
-# NO SELinux for Android 2.2 (added in 4.3)
+# NO SELinux for Android 2.3 (added in 4.3)
 # ---------------------------------------------------------------------------
-# CONFIG_SECURITY_SELINUX is NOT set
+# CONFIG_SECURITY_SELINUX is not set
+# CONFIG_SECURITY_SELINUX_DEVELOP is not set
+# CONFIG_SECURITY_SELINUX_BOOTPARAM is not set
 CONFIG_LSM="lockdown,yama,loadpin,safesetid,integrity"
 
 # ---------------------------------------------------------------------------
@@ -181,7 +184,7 @@ CONFIG_UEVENT_HELPER=n
 
 CONFIG_IKCONFIG=y
 CONFIG_IKCONFIG_PROC=y
-CONFIG_LOCALVERSION="-vita-android-2.2"
+CONFIG_LOCALVERSION="-vita-android-2.3"
 
 # ---------------------------------------------------------------------------
 # GPU Research

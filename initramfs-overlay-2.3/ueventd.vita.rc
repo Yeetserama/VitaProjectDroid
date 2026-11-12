@@ -1,0 +1,30 @@
+# Device permissions for the PlayStation Vita (Android 2.3 Gingerbread).
+#
+# Android 2.3's ueventd reads /ueventd.rc and then /ueventd.${hardware}.rc,
+# where ${hardware} comes from /proc/cpuinfo -- not from androidboot.hardware.
+# The Vita reports a generic board name, so build-initramfs.sh appends this
+# file to the stock /ueventd.rc instead of installing it as a separate file.
+# The generic rules already cover /dev/input/*, /dev/ashmem, /dev/binder,
+# /dev/uinput and /dev/graphics/*; these entries add the Vita-specific nodes.
+
+# Gingerbread's stock rule is /dev/log/*, but the backported 4.19 logger
+# driver names its class devices logger/log_main, so they appear under
+# /dev/logger.  init.vita.rc links /dev/log/* to these nodes.
+/dev/logger/*           0662   root       log
+/dev/logger/log_main    0662   root       log
+/dev/logger/log_radio   0662   root       log
+/dev/logger/log_events  0662   root       log
+/dev/logger/log_system  0662   root       log
+
+/dev/graphics/fb0       0660   root       graphics
+/dev/sw_sync            0660   system     graphics
+/dev/ttyS0              0660   root       system
+/dev/mmcblk0            0660   root       system
+/dev/mmcblk0p12         0660   root       system
+/dev/block/mmcblk0p12   0660   root       system
+/dev/zram0              0660   root       system
+/dev/block/zram0        0660   root       system
+/dev/lowmemorykiller    0660   root       system
+
+# /dev/ashmem and /dev/binder keep the stock 0666 rules: every app process
+# opens them directly, and access is controlled by their ioctls.
