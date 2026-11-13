@@ -1,20 +1,21 @@
-// SPDX-License-Identifier: GPL-2.0-only */
-/*
- * Vita SGX543MP4+ microkernel header.
- *
- * The microkernel is our own USSE code, assembled at probe time,
- * with the device virtual addresses it needs written straight into its
- * immediates.  Only the instructions needed by the microkernel are here;
- * the floating point forms live in the userspace compiler.
- *
- * Register numbers are those the hardware uses for 32-bit words: r0..r127
- * temporaries (the top four alias the internal registers and are not
- * accepted), pa0..pa127, sa0..sa127, o0..o127.
- */
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Vita SGX543MP4+ microkernel header.
+#
+# The microkernel is our own USSE code, assembled at probe time,
+# with the device virtual addresses it needs written straight into its
+# immediates.  Only the instructions needed by the microkernel are here;
+# the floating point forms live in the userspace compiler.
+#
+# Register numbers are those the hardware uses for 32-bit words: r0..r127
+# temporaries (the top four alias the internal registers and are not
+# accepted), pa0..pa127, sa0..sa127, o0..o127.
+#
 #ifndef PSP2SGX_MK_H
 #define PSP2SGX_MK_H
 
 #include <linux/types.h>
+#include "psp2sgx_usse.h"
 
 /* The microkernel's block.  Only the microkernel writes it while the GPU
  * runs; the host reads it after an SLC flush, and writes it only at probe
@@ -56,6 +57,18 @@ enum sgx_mk_hostpost {
 
 /* Registers the microkernel keeps across job code */
 #define SGX_MK_R_HOSTCTL	0
+
+/* Offsets within the kernel region (kregion) from its base VA */
+#define SGX_MK_HOSTCTL		0x000	/* host control block (16 u32 = 64 bytes) */
+#define SGX_MK_HOSTPOST		0x040	/* host post block (16 u32 = 64 bytes) */
+#define SGX_MK_CODE		0x080	/* microkernel code */
+#define SGX_MK_KICKER		0x200	/* kicker code */
+#define SGX_MK_EVENT_PDS	0x240	/* event PDS program */
+#define SGX_MK_CODE_BASE	4	/* code base index for the microkernel */
+#define SGX_MK_JOB_INDEX	32	/* job code starts at instruction index 32 */
+#define SGX_MK_CODE_MAX		0x100	/* max microkernel code size (instructions) */
+#define SGX_MK_JOB_CODE_MAX	0x200	/* max job code size (instructions) */
+#define SGX_MK_REGION_USED	0x280	/* total kregion size used */
 
 /* Assembles the microkernel for a kernel region at kregion_va. */
 int sgx_mk_build(u64 *code, u32 cap, u32 *len, u32 kregion_va);

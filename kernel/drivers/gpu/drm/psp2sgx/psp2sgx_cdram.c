@@ -87,30 +87,33 @@ int psp2sgx_cdram_init(struct psp2sgx_device *sgx)
 		dev_info(dev, "CDRAM off (psp2sgx.cdram=0): buffer objects in system memory\n");
 		return 0;
 	}
-	res = of_reserved_mem_region_to_resource(dev->of_node, 0);
+	res = of_reserved_mem_get(dev->of_node, 0);
 	if (!res) {
 		dev_info(dev, "no CDRAM region: buffer objects in system memory\n");
 		return 0;
 	}
 	/* page-granular, and within the 32 bits a GPU PTE holds */
-	if (!PAGE_ALIGNED(res->start) || !PAGE_ALIGNED(resource_size(res)) ||
-	    res->end > U32_MAX) {
-		dev_err(dev, "unusable CDRAM region %pR\n", res);
+	if (!PAGE_ALIGNED(res->base) || !PAGE_ALIGNED(res->size) ||
+	    res->base + res->size - 1 > U32_MAX) {
+		dev_err(dev, "unusable CDRAM region %pa+%pa\n",
+			&res->base, &res->size);
 		return -EINVAL;
 	}
-	if (!request_mem_region(res->start, resource_size(res), "psp2sgx cdram")) {
-		dev_err(dev, "CDRAM region %pR is busy\n", res);
+	if (!request_mem_region(res->base, res->size, "psp2sgx cdram")) {
+		dev_err(dev, "CDRAM region %pa+%pa is busy\n",
+			&res->base, &res->size);
 		return -EBUSY;
 	}
-	c->base = res->start;
-	c->size = resource_size(res);
+	c->base = res->base;
+	c->size = res->size;
 	drm_mm_init(&c->mm, c->base, c->size);
 	err = drmm_add_action_or_reset(&sgx->drm, cdram_release, c);
 	if (err) {
 		c->size = 0;
 		return err;
 	}
-	dev_info(dev, "CDRAM %pR: %llu KiB for buffer objects\n", res,
+	dev_info(dev, "CDRAM %pa+%pa: %llu KiB for buffer objects\n",
+		 &res->base, &res->size,
 		 (unsigned long long)c->size >> 10);
 	return 0;
 }
