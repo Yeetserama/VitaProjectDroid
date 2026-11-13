@@ -23,7 +23,7 @@
 #include <linux/dma-fence.h>
 #include <linux/file.h>
 #include <linux/fdtable.h>
-#include <linux/irq.h>
+#include <linux/interrupt.h>
 #include <linux/ktime.h>
 #include <linux/sched/signal.h>
 #include <linux/sync_file.h>
@@ -1027,7 +1027,7 @@ int psp2sgx_sched_init(struct psp2sgx_device *sgx)
 	if (!sgx->step_wq)
 		return -ENOMEM;
 	err = drm_sched_init(&sgx->sched, &psp2sgx_sched_ops,
-			     DRM_SCHED_PRIORITY_COUNT, 1, 0,
+			     4, 1, 0,
 			     msecs_to_jiffies(PSP2SGX_JOB_TIMEOUT_MS),
 			     sgx->step_wq, "psp2sgx");
 	if (err)
@@ -1141,7 +1141,7 @@ int psp2sgx_ioctl_submit(struct drm_device *drm, void *data,
 		}
 	}
 
-	err = drm_sched_job_init(&job->base, &pf->entity, 1, NULL, file->client_id);
+	err = drm_sched_job_init(&job->base, &pf->entity, file, file->client_id);
 	if (err)
 		goto err_free;
 
