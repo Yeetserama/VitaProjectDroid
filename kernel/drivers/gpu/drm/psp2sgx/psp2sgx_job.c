@@ -6,6 +6,8 @@
 #include "psp2sgx_gem.h"
 #include "psp2sgx_mk.h"
 
+#include <drm/drm_exec.h>
+
 static int lookup_bos(struct drm_file *file, struct psp2sgx_job *job,
 		      const struct drm_psp2sgx_submit *args,
 		      struct drm_psp2sgx_submit_bo **out)
@@ -169,7 +171,7 @@ static int psp2sgx_ioctl_submit(struct drm_device *drm, void *data,
 			goto err_job;
 	}
 
-	drm_exec_init(&exec, DRM_EXEC_INTERRUPTIBLE_WAIT, job->nr_bos);
+	drm_exec_init(&exec, drm, DRM_EXEC_INTERRUPTIBLE_WAIT, job->nr_bos);
 	drm_exec_until_all_locked(&exec) {
 		err = drm_exec_prepare_array(&exec, job->bos, job->nr_bos, 1);
 		drm_exec_retry_on_contention(&exec);

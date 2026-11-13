@@ -198,11 +198,10 @@ CONFIG_VITA_GPU_PROBE=y
 
 # ---------------------------------------------------------------------------
 # GPU: psp2sgx DRM driver for the PowerVR SGX543MP4+ (G4)
-# DRM core is enabled. CONFIG_DRM_PSP2SGX is deliberately left unset: the
-# driver source is in kernel/drivers/gpu/drm/psp2sgx/ but needs significant
-# rework for kernel 6.12's drm_sched/dma-buf/sync_file APIs before it can
-# be built. Enable CONFIG_DRM_PSP2SGX=y once those are resolved, so
-# OpenGL ES 2 can use the GPU instead of the software renderer.
+# Driver reworked for kernel 6.12 APIs.  The DTB /soc/gpu node is added by
+# scripts/apply-kernel.sh.  Note: the driver probe needs the correct GPU IRQ
+# in the DTB; until that is reverse-engineered, probe will fail with
+# -EPROBE_DEFER but the driver compiles and loads.
 # ---------------------------------------------------------------------------
 CONFIG_DRM=y
-# CONFIG_DRM_PSP2SGX is not set
+CONFIG_DRM_PSP2SGX=y

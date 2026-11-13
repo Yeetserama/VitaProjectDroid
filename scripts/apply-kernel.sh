@@ -7,7 +7,7 @@
 # Environment:
 #   CROSS_COMPILE   default arm-linux-gnueabihf-
 #   JOBS            default nproc
-#   ANDROID_VERSION 5.1 or 4.2 (default 5.1)
+#   ANDROID_VERSION 5.1 or 4.2 or 4.2.2 (default 5.1)
 
 set -euo pipefail
 
@@ -249,9 +249,24 @@ if [ "$ANDROID_VERSION" != "2.2" ]; then
         "${BOOTARGS/androidboot.selinux=permissive/androidboot.selinux=disabled}"
 fi
 
-# Note: the /soc/gpu device tree node for the psp2sgx driver is not added
-# here because CONFIG_DRM_PSP2SGX is not set. When the driver is enabled,
-# add a /soc/gpu node with compatible "sony,vita-gpu" and reg 0xe8400000/0x20000.
+# GPU DTB node for the psp2sgx driver (G4 - CONFIG_DRM_PSP2SGX).
+# The SGX register block is at PA 0xe8400000, size 0x20000.
+# TODO: determine the correct GPU IRQ and add an "interrupts" property here.
+# Without it, platform_get_irq() returns -EINVAL and the driver will not probe.
+if [ "$ANDROID_VERSION" = "4.2" ] || [ "$ANDROID_VERSION" = "4.2.2" ]; then
+    fdtput -t s "$OUT/vita.dtb${VERSION_SUFFIX}" /soc/gpu
+    fdtput -t s "$OUT/vita.dtb${VERSION_SUFFIX}" /soc/gpu compatible "sony,vita-gpu"
+    fdtput -t u32 "$OUT/vita.dtb${VERSION_SUFFIX}" /soc/gpu reg 0xe8400000 0x20000
+    fdtput -t s "$OUT/vita.dtb${VERSION_SUFFIX}" /soc/gpu status "okay"
+    if [ "$ANDROID_VERSION" != "2.2" ]; then
+        fdtput -t s "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc/gpu
+        fdtput -t s "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc/gpu compatible "sony,vita-gpu"
+        fdtput -t u32 "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc/gpu reg 0xe8400000 0x20000
+        fdtput -t s "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc/gpu status "okay"
+    fi
+fi
+
+# Note: the /soc/gpu device tree node is added above for Android 4.2 / 4.2.2.
 
 {
     echo "kernel: incognitojam/linux_vita vita-port-6.12.0"

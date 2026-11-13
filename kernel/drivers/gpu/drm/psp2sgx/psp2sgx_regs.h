@@ -29,22 +29,6 @@
 / * ISP and the USSE pipes read 1 on an idle DevKit core (0x01008801) */
 #define SGX_CLKGATESTATUS_PIPELINE	0x001801feu
 #define SGX_BIF_MEM_REQ_STAT		0x0ca8	/* bits 7..0: reads in flight */
-#define SGX_BIF_INT_STAT			0x0ca0	/* interrupt status (per-core bank) */
-#define SGX_BIF_FAULT			0x0ca4	/* fault address (per-core bank) */
-#define SGX_BIF_DIR_LIST_BASE(n)	(0x0d00 + (n) * 4)	/* page directory base n */
-/* master block BIF/SLC registers */
-#define SGX_MASTER_BIF_CTRL		0x4c00	/* BIF control (master block) */
-#define SGX_MASTER_SLC_CTRL_BYPASS	0x4d04	/* SLC control bypass */
-#define SGX_MASTER_SLC_CTRL_INVAL	0x4d28	/* SLC invalidate */
-#define SGX_SLC_INVAL_ALL		0x1	/* invalidate all */
-/* core bank BIF registers */
-#define SGX_BIF_CTRL			0x0ca0	/* BIF control (core bank) */
-#define SGX_BIF_CTRL_INVAL		0x0c9c	/* BIF invalidate (core bank) */
-#define SGX_BIF_CTRL_INVAL_ALL		0x1	/* invalidate all */
-#define SGX_BIF_BANK_SET		0x0c98	/* bank set register */
-#define SGX_BIF_BANK0			0x0c94	/* bank 0 select */
-/* Kernel region virtual address */
-#define SGX_KREGION_VA			0xf0000000u
 #define  SGX_CLKGATECTL2_AUTO		0x0a8a8aaa	/* SGXStart's value */
 #define  SGX_CLKGATECTL2_USE_ON		0x0a8a4a6a	/* USE0/USE1 clocks on, Sony's during a job */
 #define SGX_CORE_ID			0x0020
@@ -52,6 +36,20 @@
 #define SGX_SOFT_RESET			0x0080
 #define SGX_SOFT_RESET_ISP2		BIT(6)
 #define SGX_SOFT_RESET_ALL		0x000fefffu	/* BIF..DCU_L0L1, sgx543defs.h */
+
+/* BIF (MMU) registers within bank 0 */
+#define SGX_BIF_CTRL			0x0c00
+#define SGX_BIF_BANK_SET		0x0c04
+#define SGX_BIF_BANK0			0x0c08
+#define SGX_BIF_DIR_LIST_BASE(n)	(0x0c34 + (n) * 4)
+#define SGX_BIF_CTRL_INVAL		0x0c2c
+#define SGX_BIF_CTRL_INVAL_ALL		0x1
+#define SGX_BIF_INT_STAT		0x0c04	/* within core banks */
+#define SGX_BIF_FAULT			0x0c08	/* within core banks */
+
+/* Kernel region VA: where the microkernel block is mapped in GPU address space */
+#define SGX_KREGION_VA			0xf0000000u
+
 #define SGX_VDM_BATCH_NUM		0x0320
 #define SGX_MASTER_VDM_BATCH_NUM	0x4320
 #define SGX_EVENT_HOST_ENABLE2		0x0110
@@ -116,6 +114,7 @@
 #define SGX_MASTER_SOFT_RESET		0x4080
 #define SGX_MASTER_BIF_CTRL		0x4c00
 #define SGX_MASTER_SLC_CTRL		0x4d00
+#define SGX_MASTER_SLC_CTRL_BYPASS	0x4d18
 #define SGX_MASTER_SLC_EVENT_STATUS	0x4d10
 #define SGX_MASTER_SLC_EVENT_CLEAR	0x4d14
 #define SGX_MASTER_SLC_CTRL_INVAL	0x4d28

@@ -9,7 +9,6 @@
  * drm_sched.  Userspace (Mesa's psp2sgx gallium driver) compiles shaders to
  * USSE and PDS code and builds the vertex and render state.
  */
-#include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
@@ -40,7 +39,7 @@ static int psp2sgx_ioctl_get_param(struct drm_device *drm, void *data,
 		return -EINVAL;
 	switch (args->param) {
 	case DRM_PSP2SGX_PARAM_UAPI_VERSION:
-		args->value = DRM_PSP2SGX_UAPI_VERSION;
+		args->value = PSP2SGX_UAPI_VERSION;
 		break;
 	case DRM_PSP2SGX_PARAM_CORE_ID:
 		args->value = sgx->core_id;
