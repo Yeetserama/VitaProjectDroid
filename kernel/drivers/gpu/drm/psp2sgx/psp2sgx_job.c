@@ -1027,9 +1027,8 @@ int psp2sgx_sched_init(struct psp2sgx_device *sgx)
 	if (!sgx->step_wq)
 		return -ENOMEM;
 	err = drm_sched_init(&sgx->sched, &psp2sgx_sched_ops,
-			     4, 1, 0,
-			     msecs_to_jiffies(PSP2SGX_JOB_TIMEOUT_MS),
-			     sgx->step_wq, "psp2sgx");
+			     sgx->step_wq, 4, 1, 0,
+			     msecs_to_jiffies(PSP2SGX_JOB_TIMEOUT_MS), "psp2sgx");
 	if (err)
 		destroy_workqueue(sgx->step_wq);
 	return err;
@@ -1141,7 +1140,7 @@ int psp2sgx_ioctl_submit(struct drm_device *drm, void *data,
 		}
 	}
 
-	err = drm_sched_job_init(&job->base, &pf->entity, file, file->client_id);
+	err = drm_sched_job_init(&job->base, &pf->entity, 1, file);
 	if (err)
 		goto err_free;
 
