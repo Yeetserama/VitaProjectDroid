@@ -246,6 +246,8 @@ fdtput -t s "$OUT/vita.dtb${VERSION_SUFFIX}" /chosen bootargs "$BOOTARGS"
 # Register base 0xE8400000 / size 0x20000 from Vita3K + openpvrsgx.
 # Interrupts are not yet known (reverse-engineering in progress); the driver
 # probe will simply not bind until an IRQ is added here.
+# Create /soc if it doesn't exist, then add /soc/gpu under it.
+fdtput -t s "$OUT/vita.dtb${VERSION_SUFFIX}" /soc compatible "simple-bus" 2>/dev/null || true
 fdtput -t s "$OUT/vita.dtb${VERSION_SUFFIX}" /soc/gpu compatible "sony,vita-gpu"
 fdtput -t u "$OUT/vita.dtb${VERSION_SUFFIX}" /soc/gpu reg 0xe8400000 0x20000
 
@@ -254,6 +256,7 @@ if [ "$ANDROID_VERSION" != "2.2" ]; then
     cp "$OUT/vita.dtb${VERSION_SUFFIX}" "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}"
     fdtput -t s "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /chosen bootargs \
         "${BOOTARGS/androidboot.selinux=permissive/androidboot.selinux=disabled}"
+    fdtput -t s "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc compatible "simple-bus" 2>/dev/null || true
     fdtput -t s "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc/gpu compatible "sony,vita-gpu"
     fdtput -t u "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc/gpu reg 0xe8400000 0x20000
 fi
