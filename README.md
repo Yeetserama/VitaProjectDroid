@@ -221,9 +221,9 @@ can corrupt an exFAT partition; if that happens, restore from the backup rather
 than repeatedly power-cycling.
 
 ## Supported Versions
-Android 2.3 (CURRENTLY FIXING)
-Android 3 (IN TESTING)
-Android 4.2.2 (MAIN)
-Android 5.1.1 (CURRENTLY FIXING)
-Android 6 (TO BE TESTED)
-Android 7 (TO BE TESTED)
+- Android 2.3 (CURRENTLY FIXING)
+- Android 3 (IN TESTING)
+- Android 4.2.2 (MAIN)
+- Android 5.1.1 (CURRENTLY FIXING)
+- Android 6 (TO BE TESTED)
+- Android 7 (TO BE TESTED)
