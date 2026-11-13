@@ -243,6 +243,9 @@ the console; hold **L** during power-on if a taiHEN plugin misbehaves.
 - [docs/drivers-and-firmware.md](docs/drivers-and-firmware.md) - why Vita
   firmware cannot be reused, what drivers exist, and the firmware blobs Android
   actually needs.
+- [docs/bluetooth-research.md](docs/bluetooth-research.md) - the SD8787
+  Bluetooth function, why `btmrvl_sdio` fails, and the read-only diagnostic
+  plan.
 - [docs/boot-and-storage.md](docs/boot-and-storage.md) - boot chain, kernel
   changes, initramfs, loop-mounted images, display, input, and Wi-Fi paths.
 - [docs/glbench.md](docs/glbench.md) - the software GLES2 performance gate:

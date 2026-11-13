@@ -57,7 +57,7 @@ The `incognitojam/linux_vita` 6.12 port and LinuxOnVita patches provide:
 | Audio | No codec driver; the `vita-audio` branch only enables ALSA and clock control | No sound; audio HAL must be a stub |
 | Battery/charger | No `power_supply` driver; LinuxOnVita reports battery unknown | `healthd` shows unknown; no charge status |
 | Suspend/resume | Not implemented (roadmap item) | Screen-off is just backlight off; no deep sleep |
-| Bluetooth | No driver; the `vita-bluetooth` branch has no changes yet | No BT audio/input |
+| Bluetooth | No working driver; `btmrvl_sdio` is disabled because its probe resets the shared SD8787 card | No BT audio/input. See [bluetooth-research.md](bluetooth-research.md) |
 | Camera | No V4L2 sensor driver | Camera HAL stub; no camera |
 | Motion sensors | No IIO driver | Sensor HAL stub; no gyro/accelerometer |
 | 3G modem | No driver | No telephony/data on PCH-1100 |
@@ -100,9 +100,16 @@ regulatory rules or fall back to a world domain.
 
 ### Bluetooth (only if BT is enabled later)
 
-The combo chip uses Marvell Bluetooth firmware from `linux-firmware`. The exact
-file depends on the `btmrvl`/`hci` path. Do not add it until there is a working
-Bluetooth driver.
+The combo chip uses Marvell Bluetooth firmware from `linux-firmware`. The
+8787 BT function asks for the same `mrvl/sd8787_uapsta.bin` image as Wi-Fi.
+Both functions share power, reset and the 27 MHz clock, and the driver expects
+one function to download the image while the other waits for status `0xfedc`.
+
+Enabling `CONFIG_BT_MRVL_SDIO` today reproduces a failed probe after about
+100 seconds and can reset the shared card, taking Wi-Fi down. The failure
+signature, register map and the read-only diagnostic plan are in
+[bluetooth-research.md](bluetooth-research.md). Do not enable it in a boot kit
+until that gate passes.
 
 ### What about Sony firmware files?
 
