@@ -14,10 +14,11 @@
 # Usage:
 #   scripts/build.sh [ANDROID_VERSION]
 #   ANDROID_VERSION=6.0 scripts/build.sh
+#   ANDROID_VERSION=7.0 scripts/build.sh
 #   KERNEL_SRC=/path/to/linux_vita scripts/build.sh
 #   CLEAN=1 scripts/build.sh
 #
-# ANDROID_VERSION is 5.1 (default) or 6.0.
+# ANDROID_VERSION is 5.1 (default), 6.0 or 7.0.
 #
 # Artifacts (5.1):
 #   build/out/zImage
@@ -36,6 +37,15 @@
 #   build/out/initramfs.cpio-6.0
 #   build/out/SHA256SUMS-6.0
 #   build/out/build-info.txt-6.0
+#
+# Artifacts (7.0) use the -7.0 suffix:
+#   build/out/zImage-7.0
+#   build/out/vita.dtb-7.0
+#   build/out/vita-selinux-disabled.dtb-7.0
+#   build/out/vita1000.dtb-7.0
+#   build/out/initramfs.cpio-7.0
+#   build/out/SHA256SUMS-7.0
+#   build/out/build-info.txt-7.0
 
 set -euo pipefail
 
@@ -60,6 +70,11 @@ case "$ANDROID_VERSION" in
     6.0)
         INITRAMFS="$BUILD_DIR/initramfs.cpio-6.0"
         STAGE="$BUILD_DIR/initramfs-root-6.0"
+        OUT="$BUILD_DIR/out"
+        ;;
+    7.0)
+        INITRAMFS="$BUILD_DIR/initramfs.cpio-7.0"
+        STAGE="$BUILD_DIR/initramfs-root-7.0"
         OUT="$BUILD_DIR/out"
         ;;
     *)

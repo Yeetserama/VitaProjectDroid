@@ -2,15 +2,26 @@ name: build
 
 on:
   push:
-    branches: [ android-6.0 ]
+    branches: [ android-3, android-6.0, android-7.0 ]
   pull_request:
   workflow_dispatch:
+    inputs:
+      android_version:
+        description: 'Android version to build'
+        required: true
+        default: '6.0'
+        type: choice
+        options:
+          - '3'
+          - '6.0'
+          - '7.0'
 
 permissions:
   contents: read
 
 jobs:
-  boot-package-6-0:
+  boot-package-3:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.android_version == '3' || (github.event_name == 'push' && github.ref == 'refs/heads/android-3')
     runs-on: ubuntu-24.04
     timeout-minutes: 90
 
@@ -19,9 +30,6 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Prefer public DNS
-        # The hosted runner's default resolver intermittently fails for
-        # archive.ubuntu.com and can leave apt hanging for tens of minutes.
-        # Put public resolvers first and keep the platform ones as fallback.
         run: |
           if [ -f /etc/resolv.conf ]; then
             sudo cp /etc/resolv.conf /etc/resolv.conf.platform
@@ -38,8 +46,109 @@ jobs:
 
       - name: Install build dependencies
         timeout-minutes: 20
-        # A single apt run aborts the job when the resolver fails mid-flight,
-        # so retry a few times with a short backoff.
+        run: |
+          apt_opts=(
+            -o Acquire::ForceIPv4=true
+            -o Acquire::Retries=5
+            -o Acquire::http::Timeout=20
+            -o Acquire::https::Timeout=20
+          )
+          packages=(
+            bc
+            bison
+            ca-certificates
+            device-tree-compiler
+            e2fsprogs
+            flex
+            gcc-arm-linux-gnueabihf
+            libelf-dev
+            libssl-dev
+            python3
+            unzip
+            xz-utils
+          )
+          for attempt in 1 2 3; do
+            echo "apt attempt $attempt"
+            if sudo apt-get "${apt_opts[@]}" update \
+               && sudo apt-get "${apt_opts[@]}" install \
+                    -y --no-install-recommends "${packages[@]}"; then
+              exit 0
+            fi
+            echo "apt attempt $attempt failed; retrying"
+            sleep $((attempt * 10))
+          done
+          echo "could not install build dependencies after 3 attempts" >&2
+          exit 1
+
+      - name: Cache kernel tarball
+        uses: actions/cache@v4
+        with:
+          path: build/downloads
+          key: linux-vita-a33b819fd7174f60b1d5bcb613de565b3f046687
+
+      - name: Download Android 3 SDK images
+        run: |
+          bash scripts/download-android-3.sh
+
+      - name: Build Android 3 boot package
+        run: |
+          set +e
+          ANDROID_VERSION=3 bash scripts/build.sh 2>&1 | tee build-3.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            {
+              echo "## Build failed (exit $status)"
+              echo '```'
+              tail -n 100 build-3.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            message=$(tail -n 60 build-3.log | awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }' | cut -c1-60000)
+            echo "::error title=Build boot package failed::$message"
+            exit "$status"
+          fi
+
+      - name: Upload Android 3 boot package
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-3-boot
+          if-no-files-found: error
+          path: |
+            build/out/zImage-3
+            build/out/vita.dtb-3
+            build/out/vita-selinux-disabled.dtb-3
+            build/out/vita1000.dtb-3
+            build/out/initramfs.cpio-3
+            build/out/SHA256SUMS-3
+            build/out/build-info.txt-3
+            prebuilt/system-3.img
+            prebuilt/userdata-3.img
+
+  boot-package-6-0:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.android_version == '6.0' || (github.event_name == 'push' && github.ref == 'refs/heads/android-6.0')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Prefer public DNS
+        run: |
+          if [ -f /etc/resolv.conf ]; then
+            sudo cp /etc/resolv.conf /etc/resolv.conf.platform
+            {
+              echo 'nameserver 1.1.1.1'
+              echo 'nameserver 8.8.8.8'
+              echo 'options timeout:2 attempts:2'
+              cat /etc/resolv.conf.platform
+            } > /tmp/resolv.conf.new
+            sudo cp /tmp/resolv.conf.new /etc/resolv.conf \
+              || echo "could not rewrite /etc/resolv.conf; keeping the platform resolver"
+          fi
+          getent hosts archive.ubuntu.com || true
+
+      - name: Install build dependencies
+        timeout-minutes: 20
         run: |
           apt_opts=(
             -o Acquire::ForceIPv4=true
@@ -88,16 +197,9 @@ jobs:
 
       - name: Download Android 6.0 SDK images
         run: |
-          # Pinned armeabi-v7a-23_r06.zip; the script verifies size and SHA1,
-          # then shrinks system.img with resize2fs -M and creates a 640 MiB
-          # userdata image.  No sdkmanager and no license prompts.
           bash scripts/download-android-6.0.sh
 
       - name: Build Android 6.0 boot package
-        # The job log is only visible to signed-in users on a public repo.
-        # Mirror the tail of the build output into an always-visible check
-        # annotation and the job summary so failures can be diagnosed from
-        # the API without credentials.
         run: |
           set +e
           ANDROID_VERSION=6.0 bash scripts/build.sh 2>&1 | tee build-6.0.log
@@ -134,3 +236,111 @@ jobs:
             build/out/build-info.txt-6.0
             prebuilt/system-6.0.img
             prebuilt/userdata-6.0.img
+
+  boot-package-7-0:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.android_version == '7.0' || (github.event_name == 'push' && github.ref == 'refs/heads/android-7.0')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Prefer public DNS
+        run: |
+          if [ -f /etc/resolv.conf ]; then
+            sudo cp /etc/resolv.conf /etc/resolv.conf.platform
+            {
+              echo 'nameserver 1.1.1.1'
+              echo 'nameserver 8.8.8.8'
+              echo 'options timeout:2 attempts:2'
+              cat /etc/resolv.conf.platform
+            } > /tmp/resolv.conf.new
+            sudo cp /tmp/resolv.conf.new /etc/resolv.conf \
+              || echo "could not rewrite /etc/resolv.conf; keeping the platform resolver"
+          fi
+          getent hosts archive.ubuntu.com || true
+
+      - name: Install build dependencies
+        timeout-minutes: 20
+        run: |
+          apt_opts=(
+            -o Acquire::ForceIPv4=true
+            -o Acquire::Retries=5
+            -o Acquire::http::Timeout=20
+            -o Acquire::https::Timeout=20
+          )
+          packages=(
+            bc
+            bison
+            ca-certificates
+            device-tree-compiler
+            e2fsprogs
+            flex
+            gcc-arm-linux-gnueabihf
+            libelf-dev
+            libssl-dev
+            python3
+            unzip
+            xz-utils
+          )
+          for attempt in 1 2 3; do
+            echo "apt attempt $attempt"
+            if sudo apt-get "${apt_opts[@]}" update \
+               && sudo apt-get "${apt_opts[@]}" install \
+                    -y --no-install-recommends "${packages[@]}"; then
+              exit 0
+            fi
+            echo "apt attempt $attempt failed; retrying"
+            sleep $((attempt * 10))
+          done
+          echo "could not install build dependencies after 3 attempts" >&2
+          exit 1
+
+      - name: Cache kernel tarball
+        uses: actions/cache@v4
+        with:
+          path: build/downloads
+          key: linux-vita-a33b819fd7174f60b1d5bcb613de565b3f046687
+
+      - name: Download Android 7.0 SDK images
+        run: |
+          bash scripts/download-android-7.0.sh
+
+      - name: Build Android 7.0 boot package
+        run: |
+          set +e
+          ANDROID_VERSION=7.0 bash scripts/build.sh 2>&1 | tee build-7.0.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            {
+              echo "## Build failed (exit $status)"
+              echo '```'
+              tail -n 100 build-7.0.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            message=$(tail -n 60 build-7.0.log | awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }' | cut -c1-60000)
+            echo "::error title=Build boot package failed::$message"
+            exit "$status"
+          fi
+
+      - name: Show build information
+        run: |
+          cat build/out/build-info.txt-7.0
+          cat build/out/SHA256SUMS-7.0
+
+      - name: Upload Android 7.0 boot package
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-7.0-boot
+          if-no-files-found: error
+          path: |
+            build/out/zImage-7.0
+            build/out/vita.dtb-7.0
+            build/out/vita1000.dtb-7.0
+            build/out/vita-selinux-disabled.dtb-7.0
+            build/out/initramfs.cpio-7.0
+            build/out/SHA256SUMS-7.0
+            build/out/build-info.txt-7.0
+            prebuilt/system-7.0.img
+            prebuilt/userdata-7.0.img

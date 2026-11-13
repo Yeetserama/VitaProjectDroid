@@ -7,7 +7,7 @@
 # Environment:
 #   CROSS_COMPILE   default arm-linux-gnueabihf-
 #   JOBS            default nproc
-#   ANDROID_VERSION 5.1 or 6.0 (default 5.1)
+#   ANDROID_VERSION 5.1 or 6.0 or 7.0 (default 5.1)
 
 set -euo pipefail
 
@@ -39,6 +39,14 @@ case "$ANDROID_VERSION" in
         # 6.0 uses userspace logd/lmkd, like 5.1, so the same fragment works.
         FRAGMENT="$ROOT/kernel/config/vita-android.fragment"
         LOCALVERSION="-vita-android-6.0"
+        ;;
+    7.0)
+        # Android 7.0 Nougat (API 24).  Same bootargs as 6.0; headless bring-up
+        # first, then enable UI via setprop vita.ui 1 after serial console is
+        # verified.
+        BOOTARGS="earlyprintk keep_bootcon console=tty0 console=ttyS0,115200 androidboot.hardware=vita androidboot.selinux=permissive androidboot.console=tty0 androidboot.serialno=PCH1000 rdinit=/init.vita"
+        FRAGMENT="$ROOT/kernel/config/vita-android.fragment"
+        LOCALVERSION="-vita-android-7.0"
         ;;
     *)
         echo "apply-kernel: unknown Android version: $ANDROID_VERSION" >&2
@@ -186,6 +194,7 @@ VERSION_SUFFIX=""
 case "$ANDROID_VERSION" in
     5.1) VERSION_SUFFIX="" ;;
     6.0) VERSION_SUFFIX="-6.0" ;;
+    7.0) VERSION_SUFFIX="-7.0" ;;
     *) echo "apply-kernel: unknown Android version: $ANDROID_VERSION" >&2; exit 1 ;;
 esac
 

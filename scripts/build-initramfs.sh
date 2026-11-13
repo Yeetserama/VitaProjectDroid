@@ -6,7 +6,7 @@
 #   prebuilt/ramdisk-6.0.img    stock Android 6.0 ARM ramdisk (gzip cpio)
 #   prebuilt/busybox-armv7l     static ARM busybox used by /init.vita
 #   initramfs-overlay/          Vita-specific init, fstab, input files (5.1)
-#   initramfs-overlay-6.0/      Vita-specific init, fstab, input files (6.0)
+#   initramfs-overlay-6.0/      Vita-specific init, fstab, input files (6.0 / 7.0)
 #   vendor/vita-linux/          glibc wpa_supplicant + firmware
 #
 # Output:
@@ -15,7 +15,7 @@
 #
 # Usage:
 #   scripts/build-initramfs.sh [OUTPUT.cpio] [STAGING_DIR] [ANDROID_VERSION]
-#   ANDROID_VERSION: 5.1 or 6.0 (default 5.1)
+#   ANDROID_VERSION: 5.1 or 6.0 or 7.0 (default 5.1)
 
 set -euo pipefail
 
@@ -36,6 +36,11 @@ case "$ANDROID_VERSION" in
         RAMDISK="$ROOT/prebuilt/ramdisk-6.0.img"
         OVERLAY="$ROOT/initramfs-overlay-6.0"
         RAMDISK_SHA256="713225AFABEE109C75493F8D793945768303DED45E6F9021D839C673A26475A8"
+        ;;
+    7.0)
+        RAMDISK="$ROOT/prebuilt/ramdisk-7.0.img"
+        OVERLAY="$ROOT/initramfs-overlay-7.0"
+        RAMDISK_SHA256="9A287CC86FB06AE2EE72D7F227BE29A1888968855343C6AD0C3A7D374C85AC52"
         ;;
     *)
         echo "build-initramfs: unknown Android version: $ANDROID_VERSION" >&2
