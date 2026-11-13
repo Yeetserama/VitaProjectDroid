@@ -399,6 +399,10 @@ jobs:
           path: build/downloads
           key: linux-vita-a33b819fd7174f60b1d5bcb613de565b3f046687
 
+      - name: Download Android 4.2.2 SDK images
+        run: |
+          bash scripts/download-android-4.2.sh
+
       - name: Build Android 4.2.2 GPU driver kernel
         # Builds the 4.2.2 boot package with CONFIG_VITA_GPU_DRIVER=y
         # (enabled in kernel/config/vita-android-4.2.fragment on this branch).
