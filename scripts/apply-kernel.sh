@@ -107,6 +107,10 @@ mkdir -p "$KERNEL_SRC/drivers/gpu/drm"
 rm -rf "$KERNEL_SRC/drivers/gpu/drm/psp2sgx"
 cp -a "$ROOT/kernel/drivers/gpu/drm/psp2sgx" "$KERNEL_SRC/drivers/gpu/drm/psp2sgx"
 
+echo "==> copying psp2sgx UAPI header"
+mkdir -p "$KERNEL_SRC/include/uapi/drm"
+cp -a "$ROOT/kernel/include/uapi/drm/psp2sgx_drm.h" "$KERNEL_SRC/include/uapi/drm/psp2sgx_drm.h"
+
 echo "==> wiring Android drivers and Vita DTBs into the tree"
 python3 "$ROOT/scripts/patch-kernel-tree.py" "$KERNEL_SRC"
 
