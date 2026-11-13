@@ -129,17 +129,14 @@ def patch_psp2sgx_kconfig(tree: str) -> bool:
     if not os.path.exists(path):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
-            f.write("# SPDX-License-Identifier: GPL-2.0\n\nmenu \"DRM\"\n\nendmenu\n")
+            f.write("# SPDX-License-Identifier: GPL-2.0\n\n")
     text = read(path)
     if 'source "drivers/gpu/drm/psp2sgx/Kconfig"' in text:
         return False
-    lines = text.splitlines()
-    indices = [i for i, line in enumerate(lines) if line.strip() == "endmenu"]
-    if not indices:
-        raise ValueError(f"{path}: no endmenu found")
-    index = indices[-1]
-    lines.insert(index, 'source "drivers/gpu/drm/psp2sgx/Kconfig"')
-    write(path, "\n".join(lines) + "\n")
+    if not text.endswith("\n"):
+        text += "\n"
+    text += 'source "drivers/gpu/drm/psp2sgx/Kconfig"\n'
+    write(path, text)
     return True
 
 
