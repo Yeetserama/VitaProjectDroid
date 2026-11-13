@@ -23,6 +23,7 @@
 #include <linux/dma-fence.h>
 #include <linux/file.h>
 #include <linux/fdtable.h>
+#include <linux/irq.h>
 #include <linux/ktime.h>
 #include <linux/sched/signal.h>
 #include <linux/sync_file.h>
@@ -928,7 +929,7 @@ static enum drm_gpu_sched_stat psp2sgx_timedout_job(struct drm_sched_job *sched_
 
 	synchronize_irq(sgx->irq);
 	if (job->done && dma_fence_is_signaled(job->done))
-		return DRM_GPU_SCHED_STAT_NO_HANG;
+		return DRM_GPU_SCHED_STAT_NOMINAL;
 
 	/*
 	 * Its last run finished but nothing took the job on: go on with it
@@ -943,7 +944,7 @@ static enum drm_gpu_sched_stat psp2sgx_timedout_job(struct drm_sched_job *sched_
 			 job->seqno, job->step, job->nr_steps, READ_ONCE(job->kick),
 			 sgx->sw_events, sgx->irq_done, ++sgx->missed_done);
 		queue_work(sgx->step_wq, &sgx->step_work);
-		return DRM_GPU_SCHED_STAT_NO_HANG;
+		return DRM_GPU_SCHED_STAT_NOMINAL;
 	}
 
 	/* the job is off the hardware from here; no step work continues it */
@@ -974,8 +975,8 @@ static enum drm_gpu_sched_stat psp2sgx_timedout_job(struct drm_sched_job *sched_
 	mutex_unlock(&sgx->hw_lock);
 
 	drm_sched_resubmit_jobs(&sgx->sched);
-	drm_sched_start(&sgx->sched, 0);
-	return DRM_GPU_SCHED_STAT_RESET;
+	drm_sched_start(&sgx->sched);
+	return DRM_GPU_SCHED_STAT_NONE;
 }
 
 static void psp2sgx_job_put_bos(struct psp2sgx_job *job)

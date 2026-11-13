@@ -112,6 +112,8 @@ struct drm_psp2sgx_task {
 	__u32 ir0;
 	__u32 sideband;
 	__u32 pds_addr;
+	__u32 data_units;
+	__u32 attr_size;
 	__u32 pad;
 };
 
@@ -126,6 +128,12 @@ struct drm_psp2sgx_submit {
 	__u64 out_sync;
 	__u32 fence_fd;
 	__u32 pad;
+};
+
+struct drm_psp2sgx_submit_bo {
+	__u32 handle;
+	__u32 flags;
+	__u64 pad;
 };
 
 #define PSP2SGX_SUBMIT_FENCE_FD_IN	1

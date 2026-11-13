@@ -69,6 +69,7 @@ enum sgx_mk_hostpost {
 #define SGX_MK_CODE_MAX		0x100	/* max microkernel code size (instructions) */
 #define SGX_MK_JOB_CODE_MAX	0x200	/* max job code size (instructions) */
 #define SGX_MK_REGION_USED	0x280	/* total kregion size used */
+#define SGX_MK_JOB_CODE		0x080	/* job code offset in kregion */
 
 /* Wait polling limits */
 #define PSP2SGX_WAIT_MAX_POLLS	0xffff	/* max poll rounds for a wait */
