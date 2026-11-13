@@ -21,10 +21,14 @@ ro.kernel.qemu.gles=0
 # Native panel is 960x544. Density 240 gives a 640x363 dp phone-like layout.
 ro.sf.lcd_density=240
 
-# Dalvik heap sizing for a 512 MB device.  Gingerbread uses heapsize as the
-# per-process maximum and heapgrowthlimit as the large-heap threshold.
-dalvik.vm.heapsize=192m
-dalvik.vm.heapgrowthlimit=64m
-dalvik.vm.heapstartsize=8m
+# Dalvik heap sizing for a 512 MB device.  Gingerbread treats heapsize as the
+# per-process maximum; unlike ART, heapgrowthlimit is only a soft threshold.
+# The SDK image's eng build enables CheckJNI for every process, which is slow
+# and turns recoverable JNI mistakes into aborts.  Turn it off for bring-up;
+# re-enable it only when chasing a specific JNI bug.
+dalvik.vm.heapsize=64m
+dalvik.vm.heapgrowthlimit=48m
+dalvik.vm.heapstartsize=5m
+ro.kernel.android.checkjni=0
 
 # The system image is odexed; there is no dex2oat/ART in Gingerbread.

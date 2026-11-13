@@ -19,6 +19,25 @@ kernel, with **no SD2Vita adapter**. Firmware is **3.65 with HENkaku + Enso**;
 "Enable Unsafe Homebrew" is on and a full console backup has been taken. This is
 a research project, not a consumer ROM.
 
+## Version status
+
+Each Android version is maintained on its own branch. "Boots" means on real
+PCH-1000 hardware, not only in a build log.
+
+| Branch | Version | State |
+| --- | --- | --- |
+| `main` | 5.1.1 (API 22) | UI and Wi-Fi work, but app launches take an unusually long time; not pleasant to use yet. |
+| `android-4.2.2` | 4.2.2 (API 17) | UI starts automatically, navigation bar and Wi-Fi work; current verification branch. |
+| `android-gingerbread` | 2.3.7 (API 10) | Headless boot and adb work. Enabling the UI makes `zygote` exit and init then kills/restarts `media`; crash capture is in place, cause still open. |
+| planned | Honeycomb / 6 / 7 | Not started; only worth a branch if a generic ARMv7 SDK image boots with the existing kernel work. |
+
+The Gingerbread failure is the same symptom class as the earlier 5.1.1 zygote
+crash, not a separate media bug: Gingerbread's stock `init.rc` restarts `media`
+whenever `zygote` exits, so both names appear in the log. The 5.1.1 slow app
+start is a separate performance issue. Details:
+[docs/android-2.3.md](docs/android-2.3.md),
+[docs/android-4.2.md](docs/android-4.2.md).
+
 Not affiliated with Sony or Google. You need your own console, your own legally
 obtained firmware, and you must be comfortable with the risk of data loss.
 

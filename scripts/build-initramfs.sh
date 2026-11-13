@@ -110,7 +110,8 @@ rm -f "$STAGE/ueventd.vita.rc"
 
 # A Git checkout on Windows does not preserve execute bits.  Restore them here
 # so the checks below do not fail on an otherwise correct tree.
-chmod 0755 "$STAGE/init.vita" "$STAGE/vita-log.sh" "$STAGE/vita-net.sh" "$STAGE/vita-ui.sh" 2>/dev/null || true
+chmod 0755 "$STAGE/init.vita" "$STAGE/vita-log.sh" "$STAGE/vita-net.sh" \
+    "$STAGE/vita-ui.sh" "$STAGE/vita-ui-start.sh" "$STAGE/vita-diag.sh" 2>/dev/null || true
 
 echo "==> installing busybox"
 mkdir -p "$STAGE/sbin" "$STAGE/bin"
@@ -150,6 +151,8 @@ REQUIRED_FILES="
     $STAGE/default.prop
     $STAGE/egl.cfg.vita
     $STAGE/vita-log.sh
+    $STAGE/vita-diag.sh
+    $STAGE/vita-ui-start.sh
     $STAGE/bin/sh
     $STAGE/sbin/busybox
     $STAGE/sbin/adbd
@@ -172,6 +175,8 @@ grep -q '^/dev/log_main' "$STAGE/ueventd.rc" \
 [ -x "$STAGE/vita-log.sh" ] || die "vita-log.sh is not executable"
 [ -x "$STAGE/vita-net.sh" ] || die "vita-net.sh is not executable"
 [ -x "$STAGE/vita-ui.sh" ] || die "vita-ui.sh is not executable"
+[ -x "$STAGE/vita-ui-start.sh" ] || die "vita-ui-start.sh is not executable"
+[ -x "$STAGE/vita-diag.sh" ] || die "vita-diag.sh is not executable"
 [ -x "$STAGE/vita-linux/usr/sbin/wpa_supplicant" ] || die "wpa_supplicant is not executable"
 
 echo "==> packing newc cpio"

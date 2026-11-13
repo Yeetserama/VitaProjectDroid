@@ -1,6 +1,23 @@
 # Android 2.3.7 (Gingerbread, API 10) on PS Vita
 
-## Status: Experimental
+## Status: Experimental (headless boot works; UI start still crashes)
+
+The headless bring-up works: Android 2.3.7 boots, adbd is reachable over
+Wi-Fi, and the core services stay up. Enabling the framework is not stable yet.
+When `vita.ui=1` is set, `zygote` exits unexpectedly and `media` is killed and
+restarted with it. This is the same class of failure that Android 5.1.1 hit
+before its zygote preload crash was fixed. The difference is that Gingerbread
+has no userspace `logd`, so the crash has to be read from the kernel log and
+the preserved logcat snapshot.
+
+The `vita-diag` service now captures logcat, dmesg, ANR traces, tombstones and
+memory state into `ur0:/android/diag/` on every zygote or media restart. The
+next bring-up step is to reproduce the crash once with those files present and
+read `last-crash.txt`.
+
+5.1.1 is also not a usable daily driver yet: its UI starts, but launching an
+app can take an unusually long time. That is a separate performance problem,
+not the Gingerbread crash.
 
 This document describes the Android 2.3.7 bring-up for the PlayStation Vita
 (PCH-1000), based on the Android 5.1.1 port. It is a separate, self-contained
@@ -86,11 +103,20 @@ emulator GL pipe (`libEGL_emulation.so`), which does not exist on the Vita.
 core services (`servicemanager`, `vold`, `netd`, `adbd`, `debuggerd`) still
 start, which makes headless bring-up debuggable over adb.
 
-`adb shell setprop vita.ui 1` (or touching `ur0:/android/ui`) starts `media`
-then `zygote`. SurfaceFlinger is instantiated by `system_server` itself
-(Gingerbread has no separate `surfaceflinger` init service); AudioFlinger,
-MediaPlayerService and AudioPolicyService live in `media` (`mediaserver`), so
-both services are needed before `AudioService` can finish starting.
+`adb shell setprop vita.ui 1` (or touching `ur0:/android/ui`) starts `media`,
+then `vita-ui-start` waits up to 15 seconds for mediaserver to reach `running`
+and gives it two more seconds to register its binder services before it runs
+`setprop ctl.start zygote`. SurfaceFlinger is instantiated by `system_server`
+itself (Gingerbread has no separate `surfaceflinger` init service);
+AudioFlinger, MediaPlayerService and AudioPolicyService live in `media`
+(`mediaserver`), so both services are needed before `AudioService` can finish
+starting. The short delay removes the start-order race where `AudioService`
+could connect to a mediaserver that had forked but not yet registered.
+
+`zygote` has `onrestart restart media` and `onrestart restart netd` in the
+stock `init.rc`. A zygote crash therefore also makes init kill and restart
+`media`, which is why the logs show both services dying together. The zygote
+exit is the root event; `media` is collateral.
 
 ## Kernel requirements
 
@@ -174,8 +200,11 @@ No SD2Vita is used.
    userdata-2.3.img -> ur0:/android/userdata.img
    ```
 
-   Check free space first. System plus userdata need about 800 MiB, so remove
-   the 4.2/5.1 images if ur0 is tight.
+   Check free space first. System plus userdata need about 800 MiB. The boot
+   also creates a 512 MiB `ur0:/android/swap.img` on first start, so leave at
+   least 1.4 GiB free and remove the 4.2/5.1 images if ur0 is tight. If ur0 is
+   too full, swap creation and swap-on fail safely and Android still boots
+   with zram only.
 
 3. Optional Wi-Fi config at `ur0:/android/wpa_supplicant.conf`:
 
@@ -212,7 +241,13 @@ adb shell getprop ro.build.version.release   # 2.3.7
 adb shell getprop ro.build.version.sdk       # 10
 adb shell getprop init.svc.zygote            # stopped until vita.ui=1
 adb shell cat /mnt/ur0/android/boot.log
+adb shell free                               # zram + ur0 swap, if enabled
+adb shell cat /proc/swaps
 ```
+
+The first boot creates `ur0:/android/swap.img` (512 MiB). That takes longer
+than later boots; watch for `ur0 swap enabled` in `boot.log`. If `free` shows
+no ur0 swap, read the `swap.img` lines in `boot.log` before deleting anything.
 
 Enable the UI:
 
@@ -228,31 +263,59 @@ Or create the marker before boot:
 ur0:/android/ui
 ```
 
+If zygote or media restart, the monitor keeps the newest four snapshots:
+
+```bash
+adb pull /mnt/ur0/android/diag
+adb shell cat /mnt/ur0/android/diag/last-crash.txt
+```
+
+`last-crash.txt` contains `getprop`, `ps`, `/proc/meminfo`, every logcat
+buffer, and the tail of dmesg at the moment of the crash. Pull it before
+rebooting: the next boot overwrites `boot.log`, and only the diag directory is
+preserved.
+
 ## Known issues and follow-ups
 
-1. **Software rendering only.** `libGLES_android.so` is GLES1. It is enough for
+1. **Zygote crashes when the UI starts.** Setting `vita.ui=1` makes `zygote`
+   exit, and init's stock `onrestart restart media` then kills and restarts
+   `media` too. This is the same symptom class as the earlier Android 5.1.1
+   failure, not a media bug. The `vita-ui-start` helper now gives mediaserver a
+   head start and `vita-diag` preserves a crash snapshot, but the underlying
+   zygote exception has not been identified yet. Pull
+   `ur0:/android/diag/last-crash.txt` before rebooting and read the last
+   `logcat` lines from the dying `zygote` process.
+
+2. **Software rendering only.** `libGLES_android.so` is GLES1. It is enough for
    SurfaceFlinger 2.3 and Launcher2, but not for GLES2 apps.
 
-2. **Input mapping.** Gingerbread's `EventHub` looks for key layouts and IDC
+3. **Input mapping.** Gingerbread's `EventHub` looks for key layouts and IDC
    files under `/system/usr/keylayout` and `/system/usr/idc`. The Vita KL/IDC
    files in the initramfs are not used yet; without them the Vita buttons fall
    back to `qwerty.kl`. Touch should still be detected (evdev), but the mapping
    needs a follow-up bind mount or a copied `/system/usr` overlay.
 
-3. **No SD card / vold volume.** The 2.3 ramdisk's `vold.fstab.goldfish` and
+4. **No SD card / vold volume.** The 2.3 ramdisk's `vold.fstab.goldfish` and
    `vold.fstab.ranchu` are removed, and the `vold` service starts without a
    backing volume. There is no `/mnt/sdcard` until a loop-backed volume is
    added.
 
-4. **Wi-Fi.** Uses the same glibc `wpa_supplicant` and SD8787 firmware as 5.1.
+5. **Wi-Fi.** Uses the same glibc `wpa_supplicant` and SD8787 firmware as 5.1.
    It is started as a default-class oneshot (`vita-net`) because Gingerbread
    has no `late_start` class.
 
-5. **Memory.** 512 MB RAM is still the limit. A 256 MiB userdata and zram swap
-   keep the image small; expect slow app startup and possible OOM kills.
+6. **Memory.** 512 MB RAM is still the limit. The boot adds 128 MiB of zram and
+   a 512 MiB `ur0:/android/swap.img` through `/dev/loop2`, so the kernel can
+   address about 1 GiB of anonymous memory. The SD8787-era Dalvik heap cap was
+   also reduced from 192 MiB to 64 MiB and the SDK eng build's global CheckJNI
+   was disabled; both changes cut memory use and abort risk. Disk swap is much
+   slower than RAM; expect slow app startup and occasional thrashing, not
+   desktop-class multitasking. `free` and `/proc/swaps` show whether both areas
+   came up.
 
-6. **Not verified on hardware yet.** The first boot is expected to stop in the
-   headless gate; enable `vita.ui` only after adb and the kernel log look sane.
+7. **UI start is still under test.** Headless boot has been verified on
+   hardware; the `vita.ui=1` path crashes and is the current blocker. Do not
+   treat this as a usable build yet.
 
 ## Directory structure
 

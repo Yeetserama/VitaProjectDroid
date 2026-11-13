@@ -89,14 +89,27 @@ on boot
     chmod 0660 /dev/graphics/fb0
     chown root graphics /dev/graphics/fb0
 
-    write /proc/sys/vm/swappiness 100
+    # zram is preferred, but ur0 swap is available; 60 keeps the kernel from
+    # swapping to eMMC too eagerly.
+    write /proc/sys/vm/swappiness 60
 
 # `adb shell setprop vita.ui 1` (or touch ur0:/android/ui and reboot) turns the
-# framework on after the core services are up.  Start media before zygote so
-# the audio services are published before system_server reaches AudioService.
+# framework on after the core services are up.  Media starts first, then
+# vita-ui-start waits (briefly) for mediaserver to publish its binder services
+# before starting zygote.  Starting both from this one action raced the audio
+# service registration on the Vita.
 on property:vita.ui=1
     start media
-    start zygote
+    start vita-ui-start
+
+# Gingerbread restarts media and netd whenever zygote exits, so a repeating
+# zygote crash looks like "media is being killed" too.  Keep a crash snapshot
+# before init can restart the services.
+service vita-diag /system/bin/sh /vita-diag.sh
+    class default
+    user root
+    group root system log
+    oneshot
 
 # Keep a synced kernel-log snapshot on ur0.  Android init sets panic_on_oops=1,
 # so a kernel oops or a critical-service crash loop can reset the Vita at any
@@ -112,6 +125,14 @@ service vita-log /system/bin/sh /vita-log.sh
 # Wi-Fi and the optional UI marker.  Gingerbread has no late_start class, so
 # these use the default class and run after mount_all equivalent above.
 service vita-ui /system/bin/sh /vita-ui.sh
+    class default
+    user root
+    oneshot
+
+# Started by the vita.ui=1 trigger.  It waits for media and then invokes
+# `setprop ctl.start zygote`, which clears the SVC_DISABLED flag set by the
+# headless gate.
+service vita-ui-start /system/bin/sh /vita-ui-start.sh
     class default
     user root
     oneshot
