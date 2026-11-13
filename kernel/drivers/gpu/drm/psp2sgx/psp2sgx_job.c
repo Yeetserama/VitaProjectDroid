@@ -8,6 +8,7 @@
 
 #include <drm/drm_exec.h>
 #include <drm/drm_syncobj.h>
+#include <drm/psp2sgx_drm.h>
 #include <linux/sync_file.h>
 #include <linux/fdtable.h>
 
