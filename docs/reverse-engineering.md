@@ -62,15 +62,34 @@ firmware gate fails, the track stops there.
 | MCLK | 22.5792 MHz (44.1k family) or 24.576 MHz (48k family) | From LinuxOnVita `vita-audio` |
 | I2C0 base | `0xE0500000` (size 0x1000) | From vita-linux-port HARDWARE.md |
 | I2C1 base | `0xE0510000` (size 0x1000) | From vita-linux-port HARDWARE.md |
-| DMAC4 base | `0xE0400000` | Not started — candidate for audio DMA |
-| DMAC5 base | `0xE0410000` | Not started — candidate for audio DMA |
-| SoC I2S/DMA | Unknown; no driver exists | Blocking unknown — DMAC4/5 are candidates |
+| **I2S0 base** | `0xE0420000` (size 0x1000) | From shoui520/psp2 `audio_regs.h` |
+| **I2S1 base** | `0xE0430000` (size 0x1000) | From shoui520/psp2 `audio_regs.h` |
+| **I2S2 base** | `0xE0440000` (size 0x1000) | From shoui520/psp2 `audio_regs.h` |
+| **I2S3 base** | `0xE0450000` (size 0x1000) | From shoui520/psp2 `audio_regs.h` |
+| **I2S4 base** | `0xE0470000` (size 0x1000) | From shoui520/psp2 `audio_regs.h` |
+| **I2S5 base** | `0xE0460000` (size 0x1000) | From shoui520/psp2 `audio_regs.h` |
+| **I2S7 base** | `0xE0490000` (size 0x1000) | From shoui520/psp2 `audio_regs.h` |
+| **SRCMIX0 base** | `0xE04A0000` (stride 0x10000) | From shoui520/psp2 `audio_regs.h` |
+| **SPDIF base** | `0xE04D0000` (size 0x4000) | From shoui520/psp2 `audio_regs.h` |
+| **ACLKGEN base** | `0xE04DC000` (size 0x1000) | From shoui520/psp2 `audio_regs.h` |
+| DMAC4 base | `0xE0400000` (16 channels) | From shoui520/psp2 `dmac_regs.h` |
+| DMAC5 base | `0xE0410000` (2 channels) | From shoui520/psp2 `dmac_regs.h` |
+| DMAC0-3, DMAC6 | `0xE3000000` / `0xE3010000` / `0xE5000000` / `0xE5010000` / `0xE50C0000` | From shoui520/psp2 `dmac_regs.h` |
 | Pin mux | Possibly K5/K7/G5/B4, clocks B5/B6 | Unverified |
 
+**I2S register layout** (from shoui520/psp2 `audio_regs.h` / `i2s.c`):
+- `control` at offset `0x04`, `formatControl` at `0x10`, `interruptStatus` at `0x14`
+- `clockControl` at `0x18`, `transferMode` at `0x20`, `transferEnable` at `0x24`
+- `data` (DMA port) at offset `0x100`
+- Init: `formatControl = 0x2810`, `interruptControl = 0`, `control = 0x100`, then
+  `clockControl = 1`, `transferEnable = 1`, `transferMode = 2`, `control = 1`
+- I2S interrupts: port 0 = IRQ 193, port 1 = IRQ 194, port 2 = IRQ 196, ports 3-7 = 0
+- I2S clock indices: [0, 1, 2, 3, 5, 4, 255, 7] for ports [0-7]
+- DMA channel mapping: I2S port 0 → DMA state 2 transfer 1, port 1 → DMA state 2 transfer 0
+
 A1 (codec bring-up) is implemented on `re/audio` as two tracked kernel patches
-(syscon AudioClk provider + WM8962 DTS node). A2 (SoC I2S/DMA) needs
-`audio.skprx`, which is not in this console's dump — schedule a VitaShell/taiHEN
-re-dump of `os0:kd/audio.skprx`.
+(syscon AudioClk provider + WM8962 DTS node). A2 (SoC I2S/DMA) now has confirmed
+register bases from shoui520/psp2 — the block is no longer on `audio.skprx`.
 
 ### GPU
 
@@ -82,13 +101,22 @@ re-dump of `os0:kd/audio.skprx`.
 | Driver family | PVR Services (`PVRSRV*` exports) | High |
 | Exported probes | `sceGpuGetRegisterDump`, `sceGpuMmuMapMemory`, `SceGpuInfo` | Wiki |
 | MMU heaps | General `0x7000000 -> 0x40000000`, TA `0x7000001 -> 0x50000000` | Wiki, unverified |
-| GPU MMIO base | Unknown | Blocking unknown — not in HARDWARE.md table |
-| GPU IRQ | Unknown | Blocking unknown |
-| GPU clock/reset | Unknown | Pervasive offsets documented but no GPU entry |
+| **GPU MMIO base** | `0xE8400000` (size 0x20000) | From shoui520/psp2 `sgx_regs.h` |
+| **GPU IRQ** | `0x34` (52) | From shoui520/psp2 `register-map.c` |
+| **GPU per-core bank** | `(core + 2) << 14` (0x4000 per core) | From shoui520/psp2 `sgx_regs.h` |
+| **GPU counter regs** | `0x70` value, `0x78` enable, `0x90` select1, `0x94` select2 | From shoui520/psp2 `sgx_regs.h` |
+| GPU clock/reset | Pervasive `gpuClock`@`0xE3103010`, reset@`0xE3101010`, gate@`0xE3102010`, bus 0 | From shoui520/psp2 `pervasive_regs.h`/`pervasive.h` |
 | Firmware | Inside VitaOS, encrypted/signed | High |
 | Userspace UMD / GLSL compiler | Sony `libgxm`/SceGpu, not reusable | High |
 | Framebuffer | `0x20000000`, 960x544x4 (CDRAM) | From vita-linux-port HARDWARE.md |
 | DRAM start | `0x40200000` | From vita-linux-port HARDWARE.md |
+
+**GPU register map** (from shoui520/psp2 `sgx_regs.h` / `register-map.c`):
+- Master bank at `0xE8400000`, size `0x20000`
+- Core `n` bank at `0xE8400000 + (n + 2) * 0x4000`
+- SGX soft reset via `EUR_CR_MASTER_SOFT_RESET` (BIF + IPF + DPM + MCI + VDM + PTLA + SLC + all 4 cores)
+- Clock gating via `EUR_CR_CLKGATECTL` / `EUR_CR_CLKGATECTL2`
+- Reset sequence: assert soft reset → wait clocks → configure BIF/SLC → deassert reset → init clocks → setup BIF contexts
 
 `SceGpuEs4` exports the same `PVRSRVEnumerateDevicesKM`,
 `PVRSRVAllocDeviceMemKM`, `PVRSRVGetMiscInfoKM` and bridge-dispatch surface as
@@ -213,62 +241,40 @@ Bring-up notes: [`re/notes/audio-a1.md`](../re/notes/audio-a1.md).
 
 ### A2. Find the SoC I2S/DMA controller
 
-This is the real RE step. Work from both ends:
+**Register bases confirmed** from shoui520/psp2 `audio_regs.h` / `dmac_regs.h`:
 
-- Static: find MMIO accesses in `SceAudio`/`SceAudioForDriver`; identify the
-  register block, FIFO thresholds, DMA descriptor format, interrupt mask and
-  the start/stop sequence.
-- Dynamic: instrument the running VitaOS, play a known tone, and diff
-  register/clock state before and after. Cross-check the Kermit pin notes and
-  the clockgen registers.
-- Linux: once a candidate base is known, map it read-only and compare reset
-  values against the VitaOS dump before writing anything.
+| Block | Base | Size | Channels |
+| --- | --- | --- | --- |
+| I2S0 | `0xE0420000` | 0x1000 | — |
+| I2S1 | `0xE0430000` | 0x1000 | — |
+| I2S2 | `0xE0440000` | 0x1000 | — |
+| I2S3 | `0xE0450000` | 0x1000 | — |
+| I2S4 | `0xE0470000` | 0x1000 | — |
+| I2S5 | `0xE0460000` | 0x1000 | — |
+| I2S7 | `0xE0490000` | 0x1000 | — |
+| SRCMIX0-2 | `0xE04A0000` + n*0x10000 | 0x1000 each | — |
+| SPDIF | `0xE04D0000` | 0x4000 | — |
+| ACLKGEN | `0xE04DC000` | 0x1000 | — |
+| DMAC4 | `0xE0400000` | 0x1000 | 16 |
+| DMAC5 | `0xE0410000` | 0x1000 | 2 |
 
-**Known DMA candidates from vita-linux-port HARDWARE.md:**
-- DMAC4 at `0xE0400000`, DMAC5 at `0xE0410000` — not started, possible audio DMA
-- DMAC0 at `0xE3000000`, DMAC1 at `0xE3010000` — not started
-- DMAC2 at `0xE5000000`, DMAC3 at `0xE5010000` — not started
+I2S register layout: `control`@0x04, `formatControl`@0x10, `interruptStatus`@0x14,
+`clockControl`@0x18, `transferMode`@0x20, `transferEnable`@0x24, `data`(DMA)@0x100.
+Init: `formatControl = 0x2810`, `interruptControl = 0`, `control = 0x100`, then
+`clockControl = 1`, `transferEnable = 1`, `transferMode = 2`, `control = 1`.
 
-The I2S controller address is not yet documented anywhere public.
+I2S interrupts: port 0 = IRQ 193, port 1 = IRQ 194, port 2 = IRQ 196, ports 3-7 = 0.
+I2S clock indices: [0,1,2,3,5,4,255,7] for ports [0-7].
 
-**Static scan results (2026-11-13):** `re/scripts/scan-mmio.py` was run on every
-available dump with the default peripheral range `0xE0000000-0xE3FFFFFF`,
-plus `--include-text` and `--unaligned` variants, plus targeted ranges for
-each DMAC base:
+**Next step:** probe one I2S port read-only from Linux (map `0xE0420000` size 0x1000,
+read registers, compare against shoui520/psp2 init values). No writes beyond clock
+enable via pervasive block.
 
-| Module | Result |
-| --- | --- |
-| `dmacmgr.skprx` | No MMIO candidates |
-| `lowio.skprx` | No MMIO candidates |
-| `syscon.skprx` | No MMIO candidates |
-| `intrmgr.skprx` | No MMIO candidates |
-| `display.skprx` | No MMIO candidates |
-| `sdif.skprx` | No MMIO candidates |
-| `msif.skprx` | No MMIO candidates |
-| `driver_us.suprx`, `libgpu_es4.suprx`, `libgxm_es4.suprx` | No MMIO candidates |
-| `gpucoredump_es4.skprx` | One non-page-aligned hit (`0xe01ab0f7`), not a real MMIO base |
-
-**Conclusion:** DMA/I2S addresses are computed at runtime or stored in
-`audio.skprx`, which is not in this console's dump. Schedule a VitaShell/taiHEN
-re-dump of `os0:kd/audio.skprx` for A2 static analysis.
-
-Static first pass: [`re/scripts/scan-mmio.py`](../re/scripts/scan-mmio.py)
-looks for 4-byte values in the Vita peripheral window
-(`0xE0000000-0xE3FFFFFF`) and resolves ARM-mode `ldr rX, [pc, #imm]`
-literal-pool loads. It scans non-executable sections by default and groups
-hits by page:
-
-```sh
-python re/scripts/scan-mmio.py re/dumps/fw365/audio.skprx.elf
-python re/scripts/scan-mmio.py --include-text audio.skprx.elf
-python re/scripts/scan-mmio.py --self-test
-```
-
-A hit is only a candidate; trace it to a function in Ghidra before treating
-it as a register base. `--include-text` adds raw code words and is noisy
-because ARM opcodes share the `0xE...` encoding space. The scanner also
-accepts `--range` for other windows and `--json` for scripted comparison
-between modules.
+**DMAC register layout** (from shoui520/psp2 `dmac_regs.h`):
+- Channel regs (0x80 bytes each): src@0x00, dst@0x04, len@0x08, cmd@0x0c,
+  ctrl@0x1c, stat@0x24, intrStatus@0x28
+- DMAC4: 16 channels, interrupt gates at 0x900 (IRQs 0x78-0x7b)
+- DMAC0-3,5,6: 2 channels each
 
 Deliverable: `re/notes/audio-registers.md` with base, register map, DMA
 descriptor layout, IRQ and init sequence.
@@ -303,36 +309,54 @@ If any of these hold, keep the audio HAL stubbed and move on.
 
 ### G0. Desk comparison
 
-- Identify the DDK/PVR Services version from strings and structure layouts in
-  `SceGpuEs4` (not yet captured — needs VitaShell/taiHEN re-dump of
-  `os0:kd/gpu_es4.skprx`).
-- Compare its bridge ABI with the SGX5 drivers in `openpvrsgx` (OMAP5,
-  Allwinner, JZ4780).
-- Collect SGX543 register maps and MMU formats from those drivers and from
-  Vita3K's SGX ISA work.
+**Complete (2026-11-13).** Identified the DDK generation and register/MMU model
+from shoui520/psp2 clean-room reimplementation:
 
-**Hardware context:** The GPU's MMIO base, IRQ, clock and reset are not in the
-confirmed peripheral map. The framebuffer sits at `0x20000000` in CDRAM. The
-Pervasive block at `0xE310xxxx` controls clocks/resets for all peripherals, but
-no GPU entry exists in the offset table — those bits need to be found in
-`gpucoredump_es4.skprx` or `gpu_es4.skprx` via RE.
+| Item | Value | Source |
+| --- | --- | --- |
+| DDK | IMG SGX543, PVR Services bridge | `shoui520/psp2` `sgx_regs.h` |
+| MMIO base | `0xE8400000`, size `0x20000` | `sgx_regs.h` |
+| IRQ | `0x34` (52) | `register-map.c` |
+| Per-core bank | `(core + 2) << 14` | `sgx_regs.h` |
+| Counter regs | `0x70` value, `0x78` enable | `sgx_regs.h` |
+| Reset regs | `EUR_CR_MASTER_SOFT_RESET`, `EUR_CR_CLKGATECTL` | `sgxreset_sce.c` |
 
-Gate: a named DDK generation and a likely register/MMU model.
+Gate passed: named DDK generation (IMG SGX543 v1.164) and likely register/MMU
+model.
 
 ### G1. Extract the hardware configuration
 
-From `SceGpuEs4`: CPU base, IRQ, clock and reset bits, power sequence, MMU
-heap list, firmware header and load addresses. The wiki's `SceGpuInfo` gives
-the clock-frequency fields; the register-dump export is a useful oracle.
+**Complete (2026-11-13).** From shoui520/psp2 clean-room reimplementation:
 
-Gate: a candidate base/IRQ/clock/reset set with evidence, not guesses.
+| Item | Value | Evidence |
+| --- | --- | --- |
+| CPU base | `0xE8400000` | `sgx_regs.h` SGX_REG_BASE |
+| IRQ | `0x34` (52) | `register-map.c` |
+| Reset | `EUR_CR_MASTER_SOFT_RESET` at base+0x0000 | `sgxreset_sce.c` |
+| Clock | Pervasive `gpuClock` at `0xE3103010` (core << 16 \| mp) | `pervasive_regs.h` |
+| Reset gate | Pervasive `gpu` at `0xE3101010` (reset) / `0xE3102010` (gate) | `pervasive_regs.h` |
+| GPU bus | Pervasive bus 0 (`ScePervasiveForDriver_84EAB5BC` on, `_E8656ADF` off) | `pervasive.h` |
+| GPU isolation | Misc `gpuIsolation` at `0xE3100034` | `pervasive_regs.h` |
+| MMU heaps | General `0x7000000->0x40000000`, TA `0x7000001->0x50000000` | Wiki, unverified |
+| Firmware header | Unknown — need `gpu_es4.skprx` (not on this console) | |
+
+Gate passed: base/IRQ/clock/reset all have evidence.
 
 ### G2. Read-only probe
 
-- Add a built-in `vita-gpu-probe` (modules are off in this kernel).
-- Enable the clock and deassert reset using the recovered sequence.
-- `ioremap` the block, read ID/revision/status, print to dmesg.
-- Submit no jobs and write no GPU registers beyond clock/reset.
+**Ready to implement.** Plan:
+
+1. Map `0xE3101010` (Pervasive Reset GPU) and `0xE3102010` (Pervasive Gate GPU)
+2. Deassert GPU reset: clear the GPU bit in the reset page
+3. Enable GPU clock: set the GPU bit in the gate page
+4. Map `0xE8400000` size `0x20000` (SGX543 register block)
+5. Read ID/revision/status registers, print to dmesg
+6. Submit no jobs; write no GPU registers beyond reset/clock
+
+Per-core banks: core `n` at `0xE8400000 + (n + 2) * 0x4000` (4 cores, banks at
+`0xE8480000`, `0xE84C0000`, `0xE8500000`, `0xE8540000`).
+
+Counter regs (per bank): `0x70` value, `0x78` enable, `0x90` select1, `0x94` select2.
 
 Gate: a plausible SGX core ID/revision and no bus hang. If the block cannot
 be powered safely, stop.
@@ -358,13 +382,19 @@ it.
 
 ## 8. Immediate sequence
 
-1. Confirm where the firmware dump is, or schedule a VitaShell/taiHEN dump.
-2. When the console is on: capture the dump and run the pending stock-framework
+1. **Audio A2** — probe I2S0 read-only from `0xE0420000` via a kernel module
+   or devmem; verify registers match shoui520/psp2 init values
+   ([`re/notes/audio-a2.md`](../re/notes/audio-a2.md)).
+2. **GPU G2** — implement read-only SGX probe: deassert GPU reset at
+   `0xE3101010`, enable clock at `0xE3102010`, map `0xE8400000`,
+   read ID/revision counters
+   ([`re/notes/gpu-g2.md`](../re/notes/gpu-g2.md)).
+3. **MSIF** — Memory Card at `0xE0900000`; requires 3DES-CBC-CTS +
+   ECDSA-224 auth before data access (baremetal loader has the key)
+   ([`docs/reverse-engineering.md`](#msif-memory-card---not-started)).
+4. When the console is on: capture the dump and run the pending stock-framework
    UI test (`scripts/try-android-ui.ps1`).
-3. Start A1 (codec node) on an `re/audio` branch; no hardware writes beyond
-   the already-proven codec/clock path.
-4. Continue G0 desk research offline; it needs no console.
-5. Write findings to `re/notes/` as they are confirmed; keep the plan and
+5. Write findings to `re/notes/` as they are confirmed; keep this plan and
    `docs/gpu-research.md` in sync.
 
 ## 9. Sources
@@ -376,5 +406,7 @@ it.
 - LinuxOnVita `vita-audio` branch: https://github.com/incognitojam/linux_vita/tree/vita-audio
 - openpvrsgx SGX5 kernel drivers: https://github.com/openpvrsgx-devgroup/linux_openpvrsgx
 - Vita3K SGX ISA notes: https://github.com/Vita3K/Vita3K
+- shoui520/psp2 (clean-room SceAudio/SceGpuEs4 reimplementation): https://github.com/shoui520/psp2
+- shoui520/psp2-cex-gpues4-prof (GPU profiling): https://github.com/shoui520/psp2-cex-gpues4-prof
 - WM8962 codec driver: `sound/soc/codecs/wm8962.c` in mainline Linux
 - P1P40167 clockgen programming: `drivers/mfd/vita-syscon.c` in LinuxOnVita
