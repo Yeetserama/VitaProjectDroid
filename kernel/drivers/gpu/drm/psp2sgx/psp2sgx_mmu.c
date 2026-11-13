@@ -151,7 +151,7 @@ static u32 *vm_pte(struct psp2sgx_vm *vm, u32 va, bool alloc)
 	if (!vm->pt[pde]) {
 		if (!alloc)
 			return NULL;
-		vm->pt[pde] = table_alloc(sgx, &vm->pt_dma[pde]);
+		vm->pt[pde] = table_alloc(vm->sgx, &vm->pt_dma[pde]);
 		if (!vm->pt[pde])
 			return NULL;
 		vm->pd[pde] = vm->pt_dma[pde] | SGX_MMU_PDE_VALID;
