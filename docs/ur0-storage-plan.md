@@ -37,11 +37,11 @@ one version can be installed at a time:
 
 | Image | Size | Mode | Purpose |
 | --- | --- | --- | --- |
-| `system.img` | up to 900 MB after `resize2fs -M` | ro loop | Android 6.0 system; expect 500-600 MB |
+| `system.img` | 464 MB after `resize2fs -M` | ro loop | Android 6.0 system (hard cap 900 MB) |
 | `userdata.img` | 640 MB | rw loop | 6.0 settings, app data, ART cache |
 | `/cache` | 64 MB tmpfs | RAM | dex2oat / scratch |
 | `swap.img` | 512 MB | swapon loop | same ur0 swap image |
-| **ur0 total** | **~1.7-2.0 GB** | | leaves **~0.5-0.8 GB** on a 2.5 GB partition |
+| **ur0 total** | **~1.6 GB** | | leaves **~0.9 GB** on a 2.5 GB partition |
 
 The download script fails if the shrunk 6.0 system image exceeds 900 MiB. Do
 not install 5.1.1 and 6.0 at the same time; swap the two image files.

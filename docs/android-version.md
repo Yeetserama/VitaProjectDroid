@@ -95,7 +95,8 @@ sizes fit ur0 with about 1.2 GB left. See
 The `android-6.0` branch uses
 `system-images;android-23;default;armeabi-v7a`. The SDK system image is 1.5 GiB
 but only about 500 MB is used, so the download script shrinks it with
-`resize2fs -M` and rejects anything above 900 MiB. A fresh 640 MiB userdata
+`resize2fs -M` and rejects anything above 900 MiB; the current build produces
+464 MiB. A fresh 640 MiB userdata
 image is created, and the same 512 MiB ur0 swap is used. The build selects
 `ramdisk-6.0.img` and `initramfs-overlay-6.0/`, but the kernel, binder ABI, and
 fragment are identical to 5.1.1. The Android 6.0 port boots headless first;

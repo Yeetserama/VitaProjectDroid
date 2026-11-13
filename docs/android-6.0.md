@@ -31,7 +31,7 @@ The kernel and boot chain are the 5.1.1 ones. Android 6.0 still uses userspace
 | `init.rc` imports | `/init.${ro.hardware}.rc` | `/init.${ro.hardware}.rc` (same) |
 | Kernel binder ABI | 32-bit, protocol 7 | 32-bit, protocol 7 |
 | Kernel fragment | `vita-android.fragment` | `vita-android.fragment` (same) |
-| System image | 750 MiB, unmodified | shrunk to the ext4 minimum, capped at 900 MiB |
+| System image | 750 MiB, unmodified | shrunk to the ext4 minimum (464 MiB in CI run 43345477531), capped at 900 MiB |
 | Userdata | 550 MiB | 640 MiB, fresh ext4 |
 | Swap | 128 MiB zram + 512 MiB ur0 | same |
 
@@ -122,11 +122,11 @@ The 6.0 image budget is roughly:
 
 | Item | Size |
 | --- | --- |
-| `system.img` | up to 900 MiB after shrinking (about 500-600 MiB expected) |
+| `system.img` | 464 MiB in the current build (hard cap 900 MiB) |
 | `userdata.img` | 640 MiB |
 | `swap.img` | 512 MiB |
 | kernel/DTB/config | ~12 MiB |
-| **Total** | **~1.6-2.1 GiB** |
+| **Total** | **~1.6 GiB** |
 
 Leave at least 300-500 MB free on ur0 for VitaOS and exFAT metadata. If
 `resize2fs` cannot shrink the system image below 900 MiB, the download script
