@@ -29,6 +29,9 @@
 / * ISP and the USSE pipes read 1 on an idle DevKit core (0x01008801) */
 #define SGX_CLKGATESTATUS_PIPELINE	0x001801feu
 #define SGX_BIF_MEM_REQ_STAT		0x0ca8	/* bits 7..0: reads in flight */
+#define SGX_BIF_INT_STAT			0x0ca0	/* interrupt status (per-core bank) */
+#define SGX_BIF_FAULT			0x0ca4	/* fault address (per-core bank) */
+#define SGX_BIF_DIR_LIST_BASE(n)	(0x0d00 + (n) * 4)	/* page directory base n */
 #define  SGX_CLKGATECTL2_AUTO		0x0a8a8aaa	/* SGXStart's value */
 #define  SGX_CLKGATECTL2_USE_ON		0x0a8a4a6a	/* USE0/USE1 clocks on, Sony's during a job */
 #define SGX_CORE_ID			0x0020

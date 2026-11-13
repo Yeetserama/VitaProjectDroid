@@ -24,6 +24,7 @@
  */
 #define SGX_MK_HOSTCTL	0
 #define SGX_MK_HOSTPOST	64
+#define SGX_MK_CODE_BASE	0	/* code base window index for microkernel */
 #define SGX_MK_REGION_USED	256
 
 /* The microkernel's block.  Only the microkernel writes it while the GPU
