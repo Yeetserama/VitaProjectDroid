@@ -1,7 +1,8 @@
-// SPDX-License-Identifier: GPL-2.0-only
-/*
- * Vita SGX543MP4+ GPU driver (G4 research skeleton).
- */
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Vita SGX543MP4+ GPU driver (G4 research skeleton).
+#
+
 config DRM_PSP2SGX
 	tristate "PlayStation Vita SGX543MP4+ GPU"
 	depends on DRM
