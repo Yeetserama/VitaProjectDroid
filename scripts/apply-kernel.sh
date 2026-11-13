@@ -41,6 +41,11 @@ case "$ANDROID_VERSION" in
         FRAGMENT="$ROOT/kernel/config/vita-android-4.2.fragment"
         LOCALVERSION="-vita-android-4.2"
         ;;
+    4.2.2)
+        BOOTARGS="earlyprintk console=ttyS0,115200 androidboot.hardware=vita androidboot.selinux=permissive androidboot.console=ttyS0 androidboot.serialno=PCH1000 rdinit=/init.vita"
+        FRAGMENT="$ROOT/kernel/config/vita-android-4.2.fragment"
+        LOCALVERSION="-vita-android-4.2"
+        ;;
     2.2)
         BOOTARGS="earlyprintk keep_bootcon console=tty0 console=ttyS0,115200 androidboot.hardware=vita androidboot.console=tty0 androidboot.serialno=PCH1000 rdinit=/init.vita"
         FRAGMENT="$ROOT/kernel/config/vita-android-2.2.fragment"
