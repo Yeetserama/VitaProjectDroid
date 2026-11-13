@@ -27,7 +27,8 @@
 
 #define R(n)	USSE_R(n)
 #define IMM(n)	USSE_IMM(n)
-#define HC	R(SGX_MK_R_HOSTCTL)
+#define HC	SGX_MK_R_HOSTCTL	/* u32 base offset for sgx_usse_st */
+#define HC_R	R(SGX_MK_R_HOSTCTL)	/* register form for ld/limm/st */
 
 #define SGX_USE_GLOBCOM1_CORE0	(SGX_CORE_BANK(0) + SGX_USE_GLOBCOM1)
 
@@ -42,7 +43,7 @@ int sgx_mk_build(u64 *code, u32 cap, u32 *len, u32 kregion_va)
 	exit = sgx_usse_label(a);
 
 	sgx_usse_smlsi(a);
-	sgx_usse_limm(a, SGX_USSE_ALWAYS, HC, kregion_va + SGX_MK_HOSTCTL);
+	sgx_usse_limm(a, SGX_USSE_ALWAYS, HC_R, kregion_va + SGX_MK_HOSTCTL);
 
 	/*
 	 * Claim the posted run: the host's post differs from the last one
@@ -57,8 +58,8 @@ int sgx_mk_build(u64 *code, u32 cap, u32 *len, u32 kregion_va)
 	 */
 	sgx_usse_lock(a, 7);
 	sgx_usse_limm(a, SGX_USSE_ALWAYS, R(16), kregion_va + SGX_MK_HOSTPOST);
-	sgx_usse_ld(a, SGX_USSE_ALWAYS, R(1), HC, IMM(SGX_HC_RUNS), 0);
-	sgx_usse_ld(a, SGX_USSE_ALWAYS, R(2), HC, IMM(SGX_HC_CLAIMED), 0);
+	sgx_usse_ld(a, SGX_USSE_ALWAYS, R(1), HC_R, IMM(SGX_HC_RUNS), 0);
+	sgx_usse_ld(a, SGX_USSE_ALWAYS, R(2), HC_R, IMM(SGX_HC_CLAIMED), 0);
 	sgx_usse_ld(a, SGX_USSE_ALWAYS, R(3), R(16), IMM(SGX_HP_POSTED), 0);
 	sgx_usse_wdf(a, 0);
 	sgx_usse_add(a, SGX_USSE_ALWAYS, R(1), R(1), IMM(1));
@@ -81,7 +82,7 @@ int sgx_mk_build(u64 *code, u32 cap, u32 *len, u32 kregion_va)
 	sgx_usse_call_index(a, SGX_USSE_ALWAYS, SGX_MK_JOB_INDEX);
 
 	/* Done: publish the claimed post, go idle, interrupt the host. */
-	sgx_usse_ld(a, SGX_USSE_ALWAYS, R(1), HC, IMM(SGX_HC_CLAIMED), 0);
+	sgx_usse_ld(a, SGX_USSE_ALWAYS, R(1), HC_R, IMM(SGX_HC_CLAIMED), 0);
 	sgx_usse_wdf(a, 0);
 	sgx_usse_st(a, SGX_USSE_ALWAYS, HC, IMM(SGX_HC_DONE_SEQNO), R(1));
 	sgx_usse_limm(a, SGX_USSE_ALWAYS, R(2), SGX_MK_IDLE);
