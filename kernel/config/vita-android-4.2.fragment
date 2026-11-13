@@ -195,3 +195,8 @@ CONFIG_LOCALVERSION="-vita-android-4.2"
 # GPU Research: Vita SGX543MP4+ Read-Only Probe (G2 gate)
 # ---------------------------------------------------------------------------
 CONFIG_VITA_GPU_PROBE=y
+
+# ---------------------------------------------------------------------------
+# GPU Research: Vita SGX543MP4+ GPU driver skeleton (G4) - ON for testing
+# ---------------------------------------------------------------------------
+CONFIG_VITA_GPU_DRIVER=y

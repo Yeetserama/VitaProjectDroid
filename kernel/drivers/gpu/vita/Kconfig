@@ -17,3 +17,21 @@ config VITA_GPU_PROBE
 	  reverse-engineering track stops here.
 	  
 	  Enable only for research builds. Not for production kernels.
+# Vita GPU Driver Configuration
+
+config VITA_GPU_DRIVER
+	bool "Vita SGX543MP4+ GPU driver skeleton (G4 research)"
+	depends on ARCH_VITA
+	help
+	  This is a RESEARCH SKELETON for the Vita's PowerVR SGX543MP4+ GPU.
+	  It powers the GPU on, maps registers, reads ID/revision registers,
+	  sets up command-ring infrastructure placeholders, and registers
+	  an IRQ stub.
+
+	  Does NOT submit jobs, does NOT load firmware, does NOT expose
+	  GLES/EGL. The G3 (firmware) gate and userspace UMD/GLSL compiler
+	  are blocked and not provided here.
+
+	  Gate: G2 read-only probe must pass on hardware before enabling.
+
+	  Enable only for research builds. Not for production kernels.
