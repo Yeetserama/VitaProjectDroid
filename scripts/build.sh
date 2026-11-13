@@ -13,6 +13,7 @@
 #
 # Usage:
 #   scripts/build.sh [ANDROID_VERSION]
+#   ANDROID_VERSION=3 scripts/build.sh
 #   ANDROID_VERSION=4.2 scripts/build.sh
 #   ANDROID_VERSION=4.2.2 scripts/build.sh
 #   KERNEL_SRC=/path/to/linux_vita scripts/build.sh
@@ -44,6 +45,15 @@
 #   build/out/initramfs.cpio-4.2.2
 #   build/out/SHA256SUMS-4.2.2
 #   build/out/build-info.txt-4.2.2
+#
+# Artifacts (for 3):
+#   build/out/zImage-3
+#   build/out/vita.dtb-3
+#   build/out/vita-selinux-disabled.dtb-3
+#   build/out/vita1000.dtb-3
+#   build/out/initramfs.cpio-3
+#   build/out/SHA256SUMS-3
+#   build/out/build-info.txt-3
 
 set -euo pipefail
 
@@ -73,6 +83,11 @@ case "$ANDROID_VERSION" in
     4.2.2)
         INITRAMFS="$BUILD_DIR/initramfs.cpio-4.2.2"
         STAGE="$BUILD_DIR/initramfs-root-4.2.2"
+        OUT="$BUILD_DIR/out"
+        ;;
+    3)
+        INITRAMFS="$BUILD_DIR/initramfs.cpio-3"
+        STAGE="$BUILD_DIR/initramfs-root-3"
         OUT="$BUILD_DIR/out"
         ;;
     2.2)

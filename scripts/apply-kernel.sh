@@ -46,6 +46,12 @@ case "$ANDROID_VERSION" in
         FRAGMENT="$ROOT/kernel/config/vita-android-4.2.fragment"
         LOCALVERSION="-vita-android-4.2"
         ;;
+    3)
+        # Android 3.x Honeycomb (API 11-13), tablet-only SDK image.
+        BOOTARGS="earlyprintk console=ttyS0,115200 androidboot.hardware=vita androidboot.selinux=permissive androidboot.console=ttyS0 androidboot.serialno=PCH1000 rdinit=/init.vita"
+        FRAGMENT="$ROOT/kernel/config/vita-android-4.2.fragment"
+        LOCALVERSION="-vita-android-3"
+        ;;
     2.2)
         BOOTARGS="earlyprintk keep_bootcon console=tty0 console=ttyS0,115200 androidboot.hardware=vita androidboot.console=tty0 androidboot.serialno=PCH1000 rdinit=/init.vita"
         FRAGMENT="$ROOT/kernel/config/vita-android-2.2.fragment"
@@ -185,7 +191,18 @@ done
 # Version-specific symbols
 case "$ANDROID_VERSION" in
     4.2)
-        for sym in CONFIG_LOG CONFIG_ANDROID_LOW_MEMORY_KILLER CONFIG_DRM CONFIG_DRM_PSP2SGX; do
+        for sym in CONFIG_LOG CONFIG_ANDROID_LOW_MEMORY_KILLER; do
+            require_symbol "$sym"
+        done
+        ;;
+    4.2.2)
+        for sym in CONFIG_LOG CONFIG_ANDROID_LOW_MEMORY_KILLER; do
+            require_symbol "$sym"
+        done
+        ;;
+    3)
+        # Android 3.x uses kernel logger + lowmemorykiller (like 4.2)
+        for sym in CONFIG_LOG CONFIG_ANDROID_LOW_MEMORY_KILLER; do
             require_symbol "$sym"
         done
         ;;
@@ -227,6 +244,7 @@ VERSION_SUFFIX=""
 case "$ANDROID_VERSION" in
     4.2) VERSION_SUFFIX="-4.2" ;;
     4.2.2) VERSION_SUFFIX="-4.2.2" ;;
+    3) VERSION_SUFFIX="-3" ;;
     2.2) VERSION_SUFFIX="-2.2" ;;
     5.1) VERSION_SUFFIX="" ;;
     *) echo "apply-kernel: unknown Android version: $ANDROID_VERSION" >&2; exit 1 ;;
