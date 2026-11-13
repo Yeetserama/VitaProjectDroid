@@ -9,10 +9,11 @@ on:
       android_version:
         description: 'Android version to build'
         required: true
-        default: '4.2'
+        default: '4.2.2'
         type: choice
         options:
           - '4.2'
+          - '4.2.2'
 
 permissions:
   contents: read
@@ -116,7 +117,7 @@ jobs:
             build/out/build-info.txt
 
   boot-package-4-2:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.android_version == '4.2' || (github.event_name == 'push' && github.ref == 'refs/heads/android-4.2.2')
+    if: github.event_name == 'workflow_dispatch' && (github.event.inputs.android_version == '4.2' || github.event.inputs.android_version == '4.2.2') || (github.event_name == 'push' && github.ref == 'refs/heads/android-4.2.2')
     runs-on: ubuntu-24.04
     timeout-minutes: 75
 
@@ -191,16 +192,16 @@ jobs:
       - name: Build Android 4.2.2 boot package
         run: |
           set +e
-          ANDROID_VERSION=4.2 bash scripts/build.sh 2>&1 | tee build-4.2.log
+          ANDROID_VERSION=4.2.2 bash scripts/build.sh 2>&1 | tee build-4.2.2.log
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
             {
               echo "## Build failed (exit $status)"
               echo '```'
-              tail -n 100 build-4.2.log
+              tail -n 100 build-4.2.2.log
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
-            message=$(tail -n 60 build-4.2.log | awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }' | cut -c1-60000)
+            message=$(tail -n 60 build-4.2.2.log | awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }' | cut -c1-60000)
             echo "::error title=Build boot package failed::$message"
             exit "$status"
           fi
@@ -211,13 +212,13 @@ jobs:
           name: android-4.2.2-boot
           if-no-files-found: error
           path: |
-            build/out/zImage-4.2
-            build/out/vita.dtb-4.2
-            build/out/vita1000.dtb-4.2
-            build/out/vita-selinux-disabled.dtb-4.2
-            build/out/initramfs.cpio-4.2
-            build/out/SHA256SUMS-4.2
-            build/out/build-info.txt-4.2
+            build/out/zImage-4.2.2
+            build/out/vita.dtb-4.2.2
+            build/out/vita1000.dtb-4.2.2
+            build/out/vita-selinux-disabled.dtb-4.2.2
+            build/out/initramfs.cpio-4.2.2
+            build/out/SHA256SUMS-4.2.2
+            build/out/build-info.txt-4.2.2
             prebuilt/system-4.2.img
             prebuilt/userdata-4.2.img
 

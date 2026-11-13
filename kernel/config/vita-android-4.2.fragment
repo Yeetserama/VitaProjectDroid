@@ -195,3 +195,13 @@ CONFIG_LOCALVERSION="-vita-android-4.2"
 # GPU Research: Vita SGX543MP4+ Read-Only Probe (G2 gate)
 # ---------------------------------------------------------------------------
 CONFIG_VITA_GPU_PROBE=y
+
+# ---------------------------------------------------------------------------
+# GPU: psp2sgx DRM driver for the PowerVR SGX543MP4+ (G4)
+# Enables the kernel-side DRM driver. Userspace (Mesa gallium psp2sgx +
+# gralloc + hwcomposer) is still a research port; enabling this makes the
+# DRM render node and GEM address space available so OpenGL ES 2 can use
+# the GPU instead of the software renderer once userspace is ported.
+# ---------------------------------------------------------------------------
+CONFIG_DRM=y
+CONFIG_DRM_PSP2SGX=y

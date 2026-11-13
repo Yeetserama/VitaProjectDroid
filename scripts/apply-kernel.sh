@@ -97,6 +97,11 @@ echo "==> copying lowmemorykiller driver"
 rm -rf "$KERNEL_SRC/drivers/misc/lowmemorykiller"
 cp -a "$ROOT/kernel/lowmemorykiller" "$KERNEL_SRC/drivers/misc/lowmemorykiller"
 
+echo "==> copying psp2sgx GPU driver"
+mkdir -p "$KERNEL_SRC/drivers/gpu/drm"
+rm -rf "$KERNEL_SRC/drivers/gpu/drm/psp2sgx"
+cp -a "$ROOT/kernel/drivers/gpu/drm/psp2sgx" "$KERNEL_SRC/drivers/gpu/drm/psp2sgx"
+
 echo "==> wiring Android drivers and Vita DTBs into the tree"
 python3 "$ROOT/scripts/patch-kernel-tree.py" "$KERNEL_SRC"
 
@@ -171,7 +176,7 @@ done
 # Version-specific symbols
 case "$ANDROID_VERSION" in
     4.2)
-        for sym in CONFIG_LOG CONFIG_ANDROID_LOW_MEMORY_KILLER; do
+        for sym in CONFIG_LOG CONFIG_ANDROID_LOW_MEMORY_KILLER CONFIG_DRM CONFIG_DRM_PSP2SGX; do
             require_symbol "$sym"
         done
         ;;
@@ -212,6 +217,7 @@ echo "==> collecting artifacts"
 VERSION_SUFFIX=""
 case "$ANDROID_VERSION" in
     4.2) VERSION_SUFFIX="-4.2" ;;
+    4.2.2) VERSION_SUFFIX="-4.2.2" ;;
     2.2) VERSION_SUFFIX="-2.2" ;;
     5.1) VERSION_SUFFIX="" ;;
     *) echo "apply-kernel: unknown Android version: $ANDROID_VERSION" >&2; exit 1 ;;
@@ -227,11 +233,20 @@ cp "$INITRAMFS" "$OUT/initramfs.cpio${VERSION_SUFFIX}"
 command -v fdtput >/dev/null 2>&1 || die "fdtput not found (install device-tree-compiler)"
 fdtput -t s "$OUT/vita.dtb${VERSION_SUFFIX}" /chosen bootargs "$BOOTARGS"
 
+# Add the SGX GPU node to the device tree so the psp2sgx driver can probe.
+# Register base 0xE8400000 / size 0x20000 from Vita3K + openpvrsgx.
+# Interrupts are not yet known (reverse-engineering in progress); the driver
+# probe will simply not bind until an IRQ is added here.
+fdtput -t s "$OUT/vita.dtb${VERSION_SUFFIX}" /soc/gpu compatible "sony,vita-gpu"
+fdtput -t u "$OUT/vita.dtb${VERSION_SUFFIX}" /soc/gpu reg 0xe8400000 0x20000
+
 # Android 2.2 has no SELinux, so no need for selinux-disabled DTB
 if [ "$ANDROID_VERSION" != "2.2" ]; then
     cp "$OUT/vita.dtb${VERSION_SUFFIX}" "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}"
     fdtput -t s "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /chosen bootargs \
         "${BOOTARGS/androidboot.selinux=permissive/androidboot.selinux=disabled}"
+    fdtput -t s "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc/gpu compatible "sony,vita-gpu"
+    fdtput -t u "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc/gpu reg 0xe8400000 0x20000
 fi
 
 {

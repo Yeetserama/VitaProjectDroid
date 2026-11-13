@@ -124,6 +124,41 @@ def patch_gpu_probe_makefile(tree: str) -> bool:
     return True
 
 
+def patch_psp2sgx_kconfig(tree: str) -> bool:
+    path = os.path.join(tree, "drivers/gpu/drm/Kconfig")
+    if not os.path.exists(path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("# SPDX-License-Identifier: GPL-2.0\n\nmenu \"DRM\"\n\nendmenu\n")
+    text = read(path)
+    if 'source "drivers/gpu/drm/psp2sgx/Kconfig"' in text:
+        return False
+    lines = text.splitlines()
+    indices = [i for i, line in enumerate(lines) if line.strip() == "endmenu"]
+    if not indices:
+        raise ValueError(f"{path}: no endmenu found")
+    index = indices[-1]
+    lines.insert(index, 'source "drivers/gpu/drm/psp2sgx/Kconfig"')
+    write(path, "\n".join(lines) + "\n")
+    return True
+
+
+def patch_psp2sgx_makefile(tree: str) -> bool:
+    path = os.path.join(tree, "drivers/gpu/drm/Makefile")
+    if not os.path.exists(path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("# SPDX-License-Identifier: GPL-2.0\n\n")
+    text = read(path)
+    if "psp2sgx/" in text:
+        return False
+    if not text.endswith("\n"):
+        text += "\n"
+    text += "obj-$(CONFIG_DRM_PSP2SGX) += psp2sgx/\n"
+    write(path, text)
+    return True
+
+
 def patch_binder_makefile(tree: str) -> bool:
     """Select the 32-bit binder ABI.
 
@@ -180,6 +215,10 @@ def main(argv: list[str]) -> int:
             changed.append("drivers/gpu/Kconfig")
         if patch_gpu_probe_makefile(tree):
             changed.append("drivers/gpu/Makefile")
+        if patch_psp2sgx_kconfig(tree):
+            changed.append("drivers/gpu/drm/Kconfig")
+        if patch_psp2sgx_makefile(tree):
+            changed.append("drivers/gpu/drm/Makefile")
         if patch_binder_makefile(tree):
             changed.append("drivers/android/Makefile")
         if patch_dts_makefile(tree):

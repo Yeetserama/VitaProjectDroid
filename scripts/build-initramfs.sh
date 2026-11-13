@@ -5,7 +5,7 @@
 #   prebuilt/ramdisk.img        stock Android ramdisk (gzip cpio)
 #   prebuilt/busybox-armv7l     static ARM busybox used by /init.vita
 #   initramfs-overlay/          Vita-specific init, fstab, input files (5.1)
-#   initramfs-overlay-4.2/      Vita-specific init, fstab, input files (4.2)
+#   initramfs-overlay-4.2/      Vita-specific init, fstab, input files (4.2 / 4.2.2)
 #   vendor/vita-linux/          glibc wpa_supplicant + firmware
 #
 # Output:
@@ -14,7 +14,7 @@
 #
 # Usage:
 #   scripts/build-initramfs.sh [OUTPUT.cpio] [STAGING_DIR] [ANDROID_VERSION]
-#   ANDROID_VERSION: 5.1 or 4.2 (default 5.1)
+#   ANDROID_VERSION: 5.1, 4.2 or 4.2.2 (default 5.1)
 
 set -euo pipefail
 
@@ -36,6 +36,12 @@ case "$ANDROID_VERSION" in
     4.2)
         RAMDISK="$ROOT/prebuilt/ramdisk-4.2.img"
         # armeabi-v7a/ramdisk.img from armeabi-v7a-17_r06.zip
+        RAMDISK_SHA256="083839999806D2B04E94B422B7154A5E92B53D1564EB981D81FFF216EDA623F3"
+        OVERLAY="$ROOT/initramfs-overlay-4.2"
+        ;;
+    4.2.2)
+        RAMDISK="$ROOT/prebuilt/ramdisk-4.2.img"
+        # 4.2.2 is a point release of API 17; same SDK ramdisk as 4.2
         RAMDISK_SHA256="083839999806D2B04E94B422B7154A5E92B53D1564EB981D81FFF216EDA623F3"
         OVERLAY="$ROOT/initramfs-overlay-4.2"
         ;;
@@ -178,6 +184,12 @@ case "$ANDROID_VERSION" in
     $STAGE/wpa_supplicant.conf
 "
         ;;
+    4.2.2)
+        REQUIRED_FILES="$REQUIRED_FILES
+    $STAGE/vita-dhcp.sh
+    $STAGE/wpa_supplicant.conf
+"
+        ;;
 esac
 for path in $REQUIRED_FILES; do
     # Use -L as well: bin/sh is an absolute symlink to /sbin/busybox, and -e
@@ -191,6 +203,9 @@ done
 [ -x "$STAGE/vita-ui.sh" ] || die "vita-ui.sh is not executable"
 case "$ANDROID_VERSION" in
     4.2)
+        [ -x "$STAGE/vita-dhcp.sh" ] || die "vita-dhcp.sh is not executable"
+        ;;
+    4.2.2)
         [ -x "$STAGE/vita-dhcp.sh" ] || die "vita-dhcp.sh is not executable"
         ;;
 esac
