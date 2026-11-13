@@ -200,11 +200,8 @@ No SD2Vita is used.
    userdata-2.3.img -> ur0:/android/userdata.img
    ```
 
-   Check free space first. System plus userdata need about 800 MiB. The boot
-   also creates a 512 MiB `ur0:/android/swap.img` on first start, so leave at
-   least 1.4 GiB free and remove the 4.2/5.1 images if ur0 is tight. If ur0 is
-   too full, swap creation and swap-on fail safely and Android still boots
-   with zram only.
+   Check free space first. System plus userdata need about 800 MiB, so remove
+   the 4.2/5.1 images if ur0 is tight.
 
 3. Optional Wi-Fi config at `ur0:/android/wpa_supplicant.conf`:
 
@@ -241,13 +238,8 @@ adb shell getprop ro.build.version.release   # 2.3.7
 adb shell getprop ro.build.version.sdk       # 10
 adb shell getprop init.svc.zygote            # stopped until vita.ui=1
 adb shell cat /mnt/ur0/android/boot.log
-adb shell free                               # zram + ur0 swap, if enabled
-adb shell cat /proc/swaps
+adb shell free                               # zram swap
 ```
-
-The first boot creates `ur0:/android/swap.img` (512 MiB). That takes longer
-than later boots; watch for `ur0 swap enabled` in `boot.log`. If `free` shows
-no ur0 swap, read the `swap.img` lines in `boot.log` before deleting anything.
 
 Enable the UI:
 
@@ -304,14 +296,10 @@ preserved.
    It is started as a default-class oneshot (`vita-net`) because Gingerbread
    has no `late_start` class.
 
-6. **Memory.** 512 MB RAM is still the limit. The boot adds 128 MiB of zram and
-   a 512 MiB `ur0:/android/swap.img` through `/dev/loop2`, so the kernel can
-   address about 1 GiB of anonymous memory. The SD8787-era Dalvik heap cap was
-   also reduced from 192 MiB to 64 MiB and the SDK eng build's global CheckJNI
-   was disabled; both changes cut memory use and abort risk. Disk swap is much
-   slower than RAM; expect slow app startup and occasional thrashing, not
-   desktop-class multitasking. `free` and `/proc/swaps` show whether both areas
-   came up.
+6. **Memory.** 512 MB RAM is still the limit. The boot adds 128 MiB of zram
+   swap. The Dalvik heap cap was also reduced from 192 MiB to 64 MiB and the
+   SDK eng build's global CheckJNI was disabled; both changes cut memory use
+   and abort risk. Expect slow app startup and possible OOM kills.
 
 7. **UI start is still under test.** Headless boot has been verified on
    hardware; the `vita.ui=1` path crashes and is the current blocker. Do not

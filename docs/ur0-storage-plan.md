@@ -20,8 +20,7 @@ no cache image:
 | `system.img` | 750 MB | ro loop | Android 5.1.1 system, framework, SystemUI, launcher |
 | `userdata.img` | 550 MB | rw loop | settings, app data, ART cache |
 | `/cache` | 64 MB tmpfs | RAM | dex2oat / scratch, recreated every boot |
-| `swap.img` | 512 MB | rw loop | optional disk swap (Gingerbread branch; see below) |
-| **ur0 total** | **~1.8 GB** | | leaves **~0.7 GB** on a 2.5 GB partition |
+| **ur0 total** | **~1.3 GB** | | leaves **~1.2 GB** on a 2.5 GB partition |
 
 Do not fill ur0. Keep at least **300-500 MB free** for VitaOS and exFAT metadata.
 The images are sparse files on the host, but when copied to exFAT they occupy
@@ -49,7 +48,6 @@ Sony card ux0 (VitaOS-visible)        ur0 (Linux-visible)
   /linux/payload.bin                    /android/userdata.img
   /linux/zImage                         /android/wpa_supplicant.conf   (optional)
   /linux/vita.dtb                       /android/ui                    (optional)
-                                        /android/swap.img              (created on first boot)
                                         /android/vita-net.log          (written by Android)
 ```
 
@@ -68,9 +66,7 @@ driver.
 3. Verify `/mnt/ur0/android/system.img` and `userdata.img` exist.
 4. `losetup -r /dev/loop0 /mnt/ur0/android/system.img`
 5. `losetup /dev/loop1 /mnt/ur0/android/userdata.img`
-6. Enable 128 MiB zram swap and set `vm.swappiness=60`. On the Gingerbread
-   branch, also create (first boot only) and attach
-   `/mnt/ur0/android/swap.img` to `/dev/loop2`, then `mkswap` + `swapon` it.
+6. Enable 128 MiB zram swap and set `vm.swappiness=100`.
 7. `exec /init`.
 
 Android's `init.vita.rc` then runs `mount_all /fstab.vita`, which mounts:
@@ -114,12 +110,8 @@ Keep ZRAM. It lives in RAM and does not consume ur0.
   corrupt exFAT and force a VitaOS database rebuild or a restore.
 - **exFAT is not journaled.** Use clean shutdowns, keep the backup current, and
   avoid running the Android UI while the battery is low.
-- **NAND wear.** Keep userdata small and keep logs off ur0 where possible. The
-  Gingerbread branch deliberately puts a 512 MiB swapfile on ur0 to reach
-  roughly 1 GiB of addressable memory; that adds sustained writes when Android
-  is under memory pressure. It is a bring-up tradeoff, not a daily-driver
-  recommendation. Prefer zram first (`swappiness=60`), keep the battery
-  charged, and expect the internal eMMC to age faster if the UI swaps heavily.
+- **NAND wear.** Keep userdata small, keep logs off ur0 where possible, and do
+  not put a swapfile there.
 - **512 MB RAM is the binding constraint.** Low-RAM Android, no GApps, minimal
   apps. Expect a slow UI and possible OOM kills even with zram.
 - **Loop devices are not partitions.** Tools that expect a real block device
