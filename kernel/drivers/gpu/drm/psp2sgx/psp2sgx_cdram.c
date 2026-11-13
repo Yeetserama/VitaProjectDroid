@@ -77,7 +77,7 @@ int psp2sgx_cdram_init(struct psp2sgx_device *sgx)
 {
 	struct psp2sgx_cdram *c = &sgx->cdram;
 	struct device *dev = sgx->dev;
-	struct resource *res;
+	struct reserved_mem *res;
 	int err;
 
 	err = drmm_mutex_init(&sgx->drm, &c->lock);
@@ -87,7 +87,7 @@ int psp2sgx_cdram_init(struct psp2sgx_device *sgx)
 		dev_info(dev, "CDRAM off (psp2sgx.cdram=0): buffer objects in system memory\n");
 		return 0;
 	}
-	res = of_reserved_mem_get(dev->of_node, 0);
+	res = of_reserved_mem_lookup(dev->of_node);
 	if (!res) {
 		dev_info(dev, "no CDRAM region: buffer objects in system memory\n");
 		return 0;

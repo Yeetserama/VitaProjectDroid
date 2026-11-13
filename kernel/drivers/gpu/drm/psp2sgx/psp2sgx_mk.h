@@ -1,16 +1,16 @@
-# SPDX-License-Identifier: GPL-2.0-only
-#
-# Vita SGX543MP4+ microkernel header.
-#
-# The microkernel is our own USSE code, assembled at probe time,
-# with the device virtual addresses it needs written straight into its
-# immediates.  Only the instructions needed by the microkernel are here;
-# the floating point forms live in the userspace compiler.
-#
-# Register numbers are those the hardware uses for 32-bit words: r0..r127
-# temporaries (the top four alias the internal registers and are not
-# accepted), pa0..pa127, sa0..sa127, o0..o127.
-#
+/* SPDX-License-Identifier: GPL-2.0-only */
+/*
+ * Vita SGX543MP4+ microkernel header.
+ *
+ * The microkernel is our own USSE code, assembled at probe time,
+ * with the device virtual addresses it needs written straight into its
+ * immediates.  Only the instructions needed by the microkernel are here;
+ * the floating point forms live in the userspace compiler.
+ *
+ * Register numbers are those the hardware uses for 32-bit words: r0..r127
+ * temporaries (the top four alias the internal registers and are not
+ * accepted), pa0..pa127, sa0..sa127, o0..o127.
+ */
 #ifndef PSP2SGX_MK_H
 #define PSP2SGX_MK_H
 
