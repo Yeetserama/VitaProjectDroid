@@ -32,6 +32,19 @@
 #define SGX_BIF_INT_STAT			0x0ca0	/* interrupt status (per-core bank) */
 #define SGX_BIF_FAULT			0x0ca4	/* fault address (per-core bank) */
 #define SGX_BIF_DIR_LIST_BASE(n)	(0x0d00 + (n) * 4)	/* page directory base n */
+/* master block BIF/SLC registers */
+#define SGX_MASTER_BIF_CTRL		0x4c00	/* BIF control (master block) */
+#define SGX_MASTER_SLC_CTRL_BYPASS	0x4d04	/* SLC control bypass */
+#define SGX_MASTER_SLC_CTRL_INVAL	0x4d28	/* SLC invalidate */
+#define SGX_SLC_INVAL_ALL		0x1	/* invalidate all */
+/* core bank BIF registers */
+#define SGX_BIF_CTRL			0x0ca0	/* BIF control (core bank) */
+#define SGX_BIF_CTRL_INVAL		0x0c9c	/* BIF invalidate (core bank) */
+#define SGX_BIF_CTRL_INVAL_ALL		0x1	/* invalidate all */
+#define SGX_BIF_BANK_SET		0x0c98	/* bank set register */
+#define SGX_BIF_BANK0			0x0c94	/* bank 0 select */
+/* Kernel region virtual address */
+#define SGX_KREGION_VA			0xf0000000u
 #define  SGX_CLKGATECTL2_AUTO		0x0a8a8aaa	/* SGXStart's value */
 #define  SGX_CLKGATECTL2_USE_ON		0x0a8a4a6a	/* USE0/USE1 clocks on, Sony's during a job */
 #define SGX_CORE_ID			0x0020

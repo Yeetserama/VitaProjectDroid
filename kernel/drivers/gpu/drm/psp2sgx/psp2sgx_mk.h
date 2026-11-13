@@ -24,6 +24,9 @@
  */
 #define SGX_MK_HOSTCTL 0
 #define SGX_MK_HOSTPOST 64
+#define SGX_MK_CODE 0x0000	/* microkernel code offset in kregion */
+#define SGX_MK_KICKER 0x0040	/* event kicker offset in kregion */
+#define SGX_MK_EVENT_PDS 0x0080	/* event PDS offset in kregion */
 #define SGX_MK_CODE_BASE 0	/* code base window index for microkernel */
 #define SGX_MK_REGION_USED 256
 

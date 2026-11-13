@@ -15,6 +15,11 @@
 #include "psp2sgx_pds.h"
 #include "psp2sgx_usse.h"
 
+/* Number of SGX cores to use (module parameter) */
+static uint psp2sgx_cores = 4;
+module_param(psp2sgx_cores, uint, 0444);
+MODULE_PARM_DESC(psp2sgx_cores, "Number of SGX cores to use (1-4, default: 4)");
+
 /*
  * The GPU power domain belongs to the secure world: SceGpuEs4 switches it
  * with SMC 0x110 (bus 0 = GPU, 1 = start, 0 = stop), and the monitor then
@@ -41,7 +46,7 @@ static u32 psp2sgx_smc_bus(u32 service, u32 bus, u32 command)
  */
 static void psp2sgx_start(struct psp2sgx_device *sgx)
 {
-	sgx_write(sgx, SGX_MASTER_CORE, clamp(cores, 1u, 4u) - 1);
+	sgx_write(sgx, SGX_MASTER_CORE, clamp(psp2sgx_cores, 1u, 4u) - 1);
 	sgx_write(sgx, SGX_MASTER_CLKGATECTL2, 0x2a9);
 	sgx_write(sgx, SGX_MASTER_CLKGATECTL, 0xaa);
 	sgx_write(sgx, SGX_MASTER_SOFT_RESET, 0x7ff);
@@ -368,7 +373,7 @@ int psp2sgx_hw_init(struct psp2sgx_device *sgx)
 	for (n = 0; n < PSP2SGX_NUM_CORES; n++)
 		sgx_write(sgx, SGX_CORE_BANK(n) + SGX_TA_CLK_GATE, 1);
 	dev_info(sgx->dev, "%u of %u cores in use (psp2sgx.cores)\n",
-		 clamp(cores, 1u, 4u), PSP2SGX_NUM_CORES);
+		 clamp(psp2sgx_cores, 1u, 4u), PSP2SGX_NUM_CORES);
 	sgx_write(sgx, 0x4a58, 0x804300f);
 	sgx_write(sgx, 0x4808, 4);
 	sgx_write(sgx, 0x4144, 0x103e8);
