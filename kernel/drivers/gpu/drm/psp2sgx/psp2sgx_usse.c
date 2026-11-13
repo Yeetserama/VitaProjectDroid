@@ -385,14 +385,14 @@ void sgx_usse_ldr(struct sgx_usse_asm *a, struct sgx_usse_reg dst, u32 reg,
 	u32 index = reg >> 2, hi, lo;
 
 	if ((reg & 3) || index >> 18 ||
-	    (value.bank != SGX_USSE_R && value.bank != SGX_USSE_PA) || value.n > 127 ||
-	    (value.bank == SGX_USSE_R && value.n >= 124)) {
+	    (dst.bank != SGX_USSE_R && dst.bank != SGX_USSE_PA) || dst.n > 127 ||
+	    (dst.bank == SGX_USSE_R && dst.n >= 124)) {
 		a->err = -EINVAL;
 		return;
 	}
 	hi = 0xfe210000u | ((index >> 14) & 0xf) << 2 |
-	     (value.bank == SGX_USSE_PA ? 1u << 7 : 0);
-	lo = 2u << 28 | value.n << 21 | ((index >> 7) & 0x7f) << 14 |
+	     (dst.bank == SGX_USSE_PA ? 1u << 7 : 0);
+	lo = 2u << 28 | dst.n << 21 | ((index >> 7) & 0x7f) << 14 |
 	     (index & 0x7f);
 	emit(a, HI(hi) | lo);
 }
