@@ -242,11 +242,23 @@ cp "$INITRAMFS" "$OUT/initramfs.cpio${VERSION_SUFFIX}"
 command -v fdtput >/dev/null 2>&1 || die "fdtput not found (install device-tree-compiler)"
 fdtput -t s "$OUT/vita.dtb${VERSION_SUFFIX}" /chosen bootargs "$BOOTARGS"
 
+# Add the SGX GPU node to the device tree so the psp2sgx driver can probe.
+# Register base 0xE8400000 / size 0x20000 from Vita3K + openpvrsgx.
+# Interrupt number is not yet known (reverse-engineering in progress) - the
+# driver probe requires an IRQ and will not bind until one is added here.
+# Create /soc if it doesn't exist, then add /soc/gpu under it.
+fdtput -t s "$OUT/vita.dtb${VERSION_SUFFIX}" /soc compatible "simple-bus" 2>/dev/null || true
+fdtput -t s "$OUT/vita.dtb${VERSION_SUFFIX}" /soc/gpu compatible "sony,vita-gpu"
+fdtput -t u "$OUT/vita.dtb${VERSION_SUFFIX}" /soc/gpu reg 0xe8400000 0x20000
+
 # Android 2.2 has no SELinux, so no need for selinux-disabled DTB
 if [ "$ANDROID_VERSION" != "2.2" ]; then
     cp "$OUT/vita.dtb${VERSION_SUFFIX}" "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}"
     fdtput -t s "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /chosen bootargs \
         "${BOOTARGS/androidboot.selinux=permissive/androidboot.selinux=disabled}"
+    fdtput -t s "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc compatible "simple-bus" 2>/dev/null || true
+    fdtput -t s "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc/gpu compatible "sony,vita-gpu"
+    fdtput -t u "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc/gpu reg 0xe8400000 0x20000
 fi
 
 # Note: the /soc/gpu device tree node for the psp2sgx driver is not added
