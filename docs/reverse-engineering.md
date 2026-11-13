@@ -60,13 +60,17 @@ firmware gate fails, the track stops there.
 | AudioClk enable | register 1, bit 4 | From LinuxOnVita `vita-audio` |
 | Rate select | register 1, bit 0: 0 = 44.1 kHz, 1 = 48 kHz | From LinuxOnVita `vita-audio` |
 | MCLK | 22.5792 MHz (44.1k family) or 24.576 MHz (48k family) | From LinuxOnVita `vita-audio` |
-| SoC I2S/DMA | Unknown; no driver exists | Blocking unknown |
+| I2C0 base | `0xE0500000` (size 0x1000) | From vita-linux-port HARDWARE.md |
+| I2C1 base | `0xE0510000` (size 0x1000) | From vita-linux-port HARDWARE.md |
+| DMAC4 base | `0xE0400000` | Not started — candidate for audio DMA |
+| DMAC5 base | `0xE0410000` | Not started — candidate for audio DMA |
+| SoC I2S/DMA | Unknown; no driver exists | Blocking unknown — DMAC4/5 are candidates |
 | Pin mux | Possibly K5/K7/G5/B4, clocks B5/B6 | Unverified |
 
-The upstream `vita-audio` branch only enables `CONFIG_SND` and adds the
-clockgen helper. It contains **no** codec node, I2S driver, DMA driver or
-machine driver. The codec has been probed successfully from Linux, which
-proves the I2C path and clock work.
+A1 (codec bring-up) is implemented on `re/audio` as two tracked kernel patches
+(syscon AudioClk provider + WM8962 DTS node). A2 (SoC I2S/DMA) needs
+`audio.skprx`, which is not in this console's dump — schedule a VitaShell/taiHEN
+re-dump of `os0:kd/audio.skprx`.
 
 ### GPU
 
@@ -78,14 +82,50 @@ proves the I2C path and clock work.
 | Driver family | PVR Services (`PVRSRV*` exports) | High |
 | Exported probes | `sceGpuGetRegisterDump`, `sceGpuMmuMapMemory`, `SceGpuInfo` | Wiki |
 | MMU heaps | General `0x7000000 -> 0x40000000`, TA `0x7000001 -> 0x50000000` | Wiki, unverified |
-| CPU base / IRQ / clock / reset | Unknown | Blocking unknown |
+| GPU MMIO base | Unknown | Blocking unknown — not in HARDWARE.md table |
+| GPU IRQ | Unknown | Blocking unknown |
+| GPU clock/reset | Unknown | Pervasive offsets documented but no GPU entry |
 | Firmware | Inside VitaOS, encrypted/signed | High |
 | Userspace UMD / GLSL compiler | Sony `libgxm`/SceGpu, not reusable | High |
+| Framebuffer | `0x20000000`, 960x544x4 (CDRAM) | From vita-linux-port HARDWARE.md |
+| DRAM start | `0x40200000` | From vita-linux-port HARDWARE.md |
 
 `SceGpuEs4` exports the same `PVRSRVEnumerateDevicesKM`,
 `PVRSRVAllocDeviceMemKM`, `PVRSRVGetMiscInfoKM` and bridge-dispatch surface as
 the open-source SGX5 kernel drivers collected by `openpvrsgx`. That makes a
 port structurally plausible; it does not solve firmware or userspace.
+
+### Confirmed peripheral map (from vita-linux-port HARDWARE.md)
+
+| Peripheral | Address | Size | Status |
+| --- | --- | --- | --- |
+| SCU | `0x1A000000` | — | Working (SMP) |
+| GIC Distributor | `0x1A001000` | — | Working |
+| PL310 L2 Cache | `0x1A002000` | — | Working |
+| ARM Global Timer | `0x1A000200` | — | Working (144 MHz clocksource) |
+| SPI0 (Syscon) | `0xE0A00000` | 0x1000 | Working |
+| DMAC0 | `0xE3000000` | — | Not started |
+| DMAC1 | `0xE3010000` | — | Not started |
+| DMAC2 | `0xE5000000` | — | Not started |
+| DMAC3 | `0xE5010000` | — | Not started |
+| DMAC4 | `0xE0400000` | — | Not started |
+| DMAC5 | `0xE0410000` | — | Not started |
+| SDIF0 (eMMC) | `0xE0B00000` | 0x1000 | Working |
+| SDIF1 (GameCard) | `0xE0C00000` | 0x1000 | Driver works, init fails |
+| SDIF2 (WLAN/BT) | `0xE0C10000` | 0x1000 | Working (mwifiex + btmrvl) |
+| SDIF3 (microSD) | `0xE0C20000` | 0x1000 | No card |
+| UART0 | `0xE2030000` | 0x10000 | Working |
+| GPIO | `0xE20A0000` | 0x1000 | Working |
+| Pervasive Reset | `0xE3101000` | 0x1000 | Working |
+| Pervasive Gate | `0xE3102000` | 0x1000 | — |
+| Pervasive BaseClk | `0xE3103000` | 0x1000 | — |
+| Pervasive Vid | `0xE3104000` | 0x1000 | — |
+
+Pervasive reset/gate offsets (relative to `0xE3101000`/`0xE3102000`):
+SDIF(bus) `0xA0+bus*4`, I2C(bus) `0x110+bus*4`, SPI(bus) `0x104+bus*4`,
+UART(bus) `0x120+bus*4`, GPIO `0x100`, MSIF `0xB0`.
+
+I2C0 devices: `0x1A` WM1803E codec, `0x4A` unknown, `0x69` P1P40167 clockgen.
 
 ## 4. Workspace and rules
 
@@ -166,6 +206,12 @@ This is the real RE step. Work from both ends:
 - Linux: once a candidate base is known, map it read-only and compare reset
   values against the VitaOS dump before writing anything.
 
+**Known DMA candidates from vita-linux-port HARDWARE.md:**
+- DMAC4 at `0xE0400000`, DMAC5 at `0xE0410000` — not started, possible audio DMA
+- DMAC0-3 at `0xE3000000`/`0xE3010000`/`0xE5000000`/`0xE5010000` — not started
+
+The I2S controller address is not yet documented anywhere public.
+
 Static first pass: [`re/scripts/scan-mmio.py`](../re/scripts/scan-mmio.py)
 looks for 4-byte values in the Vita peripheral window
 (`0xE0000000-0xE3FFFFFF`) and resolves ARM-mode `ldr rX, [pc, #imm]`
@@ -183,6 +229,12 @@ it as a register base. `--include-text` adds raw code words and is noisy
 because ARM opcodes share the `0xE...` encoding space. The scanner also
 accepts `--range` for other windows and `--json` for scripted comparison
 between modules.
+
+**Note:** The console's dump does not include `audio.skprx`. The dumps we do
+have (`dmacmgr`, `display`, `sdif`, `syscon`, etc.) were scanned with
+`scan-mmio.py` and returned no MMIO candidates in the default range — the
+addresses may be computed at runtime or stored outside the scanned sections.
+Schedule a VitaShell/taiHEN re-dump of `os0:kd/audio.skprx` for A2 static analysis.
 
 Deliverable: `re/notes/audio-registers.md` with base, register map, DMA
 descriptor layout, IRQ and init sequence.
@@ -218,11 +270,18 @@ If any of these hold, keep the audio HAL stubbed and move on.
 ### G0. Desk comparison
 
 - Identify the DDK/PVR Services version from strings and structure layouts in
-  `SceGpuEs4`.
+  `SceGpuEs4` (not yet captured — needs VitaShell/taiHEN re-dump of
+  `os0:kd/gpu_es4.skprx`).
 - Compare its bridge ABI with the SGX5 drivers in `openpvrsgx` (OMAP5,
   Allwinner, JZ4780).
 - Collect SGX543 register maps and MMU formats from those drivers and from
   Vita3K's SGX ISA work.
+
+**Hardware context:** The GPU's MMIO base, IRQ, clock and reset are not in the
+confirmed peripheral map. The framebuffer sits at `0x20000000` in CDRAM. The
+Pervasive block at `0xE310xxxx` controls clocks/resets for all peripherals, but
+no GPU entry exists in the offset table — those bits need to be found in
+`gpucoredump_es4.skprx` or `gpu_es4.skprx` via RE.
 
 Gate: a named DDK generation and a likely register/MMU model.
 

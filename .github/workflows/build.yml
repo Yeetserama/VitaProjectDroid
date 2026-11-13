@@ -2,7 +2,7 @@ name: build
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, re/audio ]
   pull_request:
   workflow_dispatch:
 
