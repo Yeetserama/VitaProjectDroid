@@ -22,9 +22,9 @@
  * block and the host post block.  The hostctl block is SGX_HC_WORDS u32
  * values (64 bytes) starting at offset 0; the hostpost block follows it.
  */
-#define SGX_MK_HOSTCTL\t0
-#define SGX_MK_HOSTPOST\t64
-#define SGX_MK_REGION_USED\t256
+#define SGX_MK_HOSTCTL	0
+#define SGX_MK_HOSTPOST	64
+#define SGX_MK_REGION_USED	256
 
 /* The microkernel's block.  Only the microkernel writes it while the GPU
  * runs; the host reads it after an SLC flush, and writes it only at probe
