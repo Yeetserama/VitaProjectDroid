@@ -122,7 +122,12 @@ The build produces version-suffixed artifacts in `build/out/`:
 3. **SELinux**: Android 4.2 SELinux policy is older. The permissive DTB should work.
 
 4. **Memory**: 4.2 has a smaller memory footprint than 5.1, which is an advantage
-   on the Vita's 512 MB RAM.
+   on the Vita's 512 MB RAM. The boot still adds 128 MiB of zram and a 512 MiB
+   `ur0:/android/swap.img` attached to `/dev/loop2`, so the kernel has about
+   1 GiB of anonymous memory to work with. The first boot creates and
+   initializes the swap image; later boots only attach it. If ur0 is full, swap
+   setup fails safely and Android boots with zram only. Disk swap is much
+   slower than RAM, so expect occasional stalls under pressure.
 
 5. **Netd routing**: Android 4.2's netd does not have the same RouteController
    issue as 5.1, but the routing repair code is kept for safety.
@@ -135,10 +140,15 @@ adb connect <vita-ip>:5555
 adb shell
 ```
 
-Check kernel log:
+Check kernel log and swap:
 ```bash
 adb shell cat /mnt/ur0/android/boot.log
+adb shell free
+adb shell cat /proc/swaps
 ```
+
+The first boot logs `creating 512 MiB swap image on ur0` and then `ur0 swap
+enabled`; later boots should only show the second line.
 
 The UI starts automatically. `vita.ui=1` is set by `init.vita.rc` at the end
 of `on boot`, after the headless safety stops, which starts SurfaceFlinger,
