@@ -200,3 +200,4 @@ CONFIG_VITA_GPU_PROBE=y
 # GPU Research: Vita SGX543MP4+ GPU driver skeleton (G4) - ON for testing
 # ---------------------------------------------------------------------------
 CONFIG_VITA_GPU_DRIVER=y
+CONFIG_DRM_PSP2SGX=y
