@@ -110,6 +110,7 @@ port structurally plausible; it does not solve firmware or userspace.
 | DMAC3 | `0xE5010000` | — | Not started |
 | DMAC4 | `0xE0400000` | — | Not started |
 | DMAC5 | `0xE0410000` | — | Not started |
+| MSIF (Memory Card) | `0xE0900000` | — | Not started — requires auth |
 | SDIF0 (eMMC) | `0xE0B00000` | 0x1000 | Working |
 | SDIF1 (GameCard) | `0xE0C00000` | 0x1000 | Driver works, init fails |
 | SDIF2 (WLAN/BT) | `0xE0C10000` | 0x1000 | Working (mwifiex + btmrvl) |
@@ -126,6 +127,23 @@ SDIF(bus) `0xA0+bus*4`, I2C(bus) `0x110+bus*4`, SPI(bus) `0x104+bus*4`,
 UART(bus) `0x120+bus*4`, GPIO `0x100`, MSIF `0xB0`.
 
 I2C0 devices: `0x1A` WM1803E codec, `0x4A` unknown, `0x69` P1P40167 clockgen.
+
+### MSIF (Memory Card) — not started
+
+| Register | Offset | Purpose |
+| --- | --- | --- |
+| Command | `0x30` | |
+| Data | `0x34` | |
+| Status | `0x38` | |
+| System | `0x3C` | bit 15 = reset |
+
+Base: `0xE0900000` (from vita-linux-port HARDWARE.md).
+MSIF requires authentication (3DES-CBC-CTS + ECDSA-224) before data access.
+The baremetal linux-loader already handles this using a hardcoded key.
+A Linux driver would need to re-authenticate or preserve state from the loader.
+
+Static scan of `msif.skprx` (in fwdump/kd/) returned no MMIO candidates —
+the base address `0xE0900000` is not referenced as a literal in the module.
 
 ## 4. Workspace and rules
 
@@ -208,9 +226,31 @@ This is the real RE step. Work from both ends:
 
 **Known DMA candidates from vita-linux-port HARDWARE.md:**
 - DMAC4 at `0xE0400000`, DMAC5 at `0xE0410000` — not started, possible audio DMA
-- DMAC0-3 at `0xE3000000`/`0xE3010000`/`0xE5000000`/`0xE5010000` — not started
+- DMAC0 at `0xE3000000`, DMAC1 at `0xE3010000` — not started
+- DMAC2 at `0xE5000000`, DMAC3 at `0xE5010000` — not started
 
 The I2S controller address is not yet documented anywhere public.
+
+**Static scan results (2026-11-13):** `re/scripts/scan-mmio.py` was run on every
+available dump with the default peripheral range `0xE0000000-0xE3FFFFFF`,
+plus `--include-text` and `--unaligned` variants, plus targeted ranges for
+each DMAC base:
+
+| Module | Result |
+| --- | --- |
+| `dmacmgr.skprx` | No MMIO candidates |
+| `lowio.skprx` | No MMIO candidates |
+| `syscon.skprx` | No MMIO candidates |
+| `intrmgr.skprx` | No MMIO candidates |
+| `display.skprx` | No MMIO candidates |
+| `sdif.skprx` | No MMIO candidates |
+| `msif.skprx` | No MMIO candidates |
+| `driver_us.suprx`, `libgpu_es4.suprx`, `libgxm_es4.suprx` | No MMIO candidates |
+| `gpucoredump_es4.skprx` | One non-page-aligned hit (`0xe01ab0f7`), not a real MMIO base |
+
+**Conclusion:** DMA/I2S addresses are computed at runtime or stored in
+`audio.skprx`, which is not in this console's dump. Schedule a VitaShell/taiHEN
+re-dump of `os0:kd/audio.skprx` for A2 static analysis.
 
 Static first pass: [`re/scripts/scan-mmio.py`](../re/scripts/scan-mmio.py)
 looks for 4-byte values in the Vita peripheral window
@@ -229,12 +269,6 @@ it as a register base. `--include-text` adds raw code words and is noisy
 because ARM opcodes share the `0xE...` encoding space. The scanner also
 accepts `--range` for other windows and `--json` for scripted comparison
 between modules.
-
-**Note:** The console's dump does not include `audio.skprx`. The dumps we do
-have (`dmacmgr`, `display`, `sdif`, `syscon`, etc.) were scanned with
-`scan-mmio.py` and returned no MMIO candidates in the default range — the
-addresses may be computed at runtime or stored outside the scanned sections.
-Schedule a VitaShell/taiHEN re-dump of `os0:kd/audio.skprx` for A2 static analysis.
 
 Deliverable: `re/notes/audio-registers.md` with base, register map, DMA
 descriptor layout, IRQ and init sequence.
