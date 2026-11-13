@@ -1028,7 +1028,8 @@ int psp2sgx_sched_init(struct psp2sgx_device *sgx)
 		return -ENOMEM;
 	err = drm_sched_init(&sgx->sched, &psp2sgx_sched_ops,
 			     sgx->step_wq, 4, 1, 0,
-			     msecs_to_jiffies(PSP2SGX_JOB_TIMEOUT_MS), "psp2sgx");
+			     msecs_to_jiffies(PSP2SGX_JOB_TIMEOUT_MS),
+			     sgx->step_wq, "psp2sgx");
 	if (err)
 		destroy_workqueue(sgx->step_wq);
 	return err;
