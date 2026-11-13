@@ -117,9 +117,7 @@ on boot
     chmod 0660 /dev/graphics/fb0 2>/dev/null
     chown root graphics /dev/graphics/fb0 2>/dev/null
 
-    # zram is preferred, but ur0 swap is available; 60 keeps the kernel from
-    # swapping to eMMC too eagerly.
-    write /proc/sys/vm/swappiness 60
+    write /proc/sys/vm/swappiness 100
 
     # This image boots straight to the launcher.  The stops above still run
     # first so a broken UI cannot hide a working adb/headless boot; setting

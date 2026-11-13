@@ -5,7 +5,7 @@
 #   1. mounts devtmpfs/proc/sys,
 #   2. mounts the Vita's ur0 partition read-write,
 #   3. attaches the Android system/userdata ext4 images to loop devices,
-#   4. enables zram and a 512 MiB swap image on ur0,
+#   4. enables zram swap,
 #   5. execs Android's real /init.
 #
 # Android's own init mounts a fresh tmpfs over /dev and its own proc/sysfs
@@ -150,42 +150,12 @@ if [ -e /sys/block/zram0/disksize ]; then
     fi
 fi
 
-# 512 MiB swap image on ur0.  ur0 is exFAT, so the file cannot be passed to
-# swapon directly; attach it to the spare loop device instead.  loop0 and loop1
-# hold system.img and userdata.img.  The image is created on first boot and
-# reused afterwards; a partial image from a full ur0 is removed rather than
-# left to be mistaken for a valid swap file.
-SWAP_IMG=/mnt/ur0/android/swap.img
-SWAP_MB=512
-[ -e /dev/loop2 ] || $BB mknod /dev/loop2 b 7 2 2>/dev/null
-$BB losetup -d /dev/loop2 2>/dev/null
-if [ ! -f "$SWAP_IMG" ]; then
-    log "creating ${SWAP_MB} MiB swap image on ur0 (first boot only)"
-    if ! $BB fallocate -l "${SWAP_MB}M" "$SWAP_IMG" 2>/dev/null; then
-        if ! $BB dd if=/dev/zero of="$SWAP_IMG" bs=1048576 count="$SWAP_MB" 2>/dev/null; then
-            log "cannot create swap.img (ur0 full?); continuing without ur0 swap"
-            $BB rm -f "$SWAP_IMG" 2>/dev/null
-        fi
-    fi
-fi
-if [ -f "$SWAP_IMG" ]; then
-    if $BB losetup /dev/loop2 "$SWAP_IMG" 2>/dev/null; then
-        if $BB mkswap /dev/loop2 >/dev/null 2>&1 && $BB swapon /dev/loop2 2>/dev/null; then
-            log "ur0 swap enabled (${SWAP_MB} MiB via /dev/loop2)"
-        else
-            log "swap.img exists but swapon failed; continuing without ur0 swap"
-            $BB losetup -d /dev/loop2 2>/dev/null
-        fi
-    else
-        log "cannot attach swap.img to /dev/loop2; continuing without ur0 swap"
-    fi
-fi
-
 # /cache is mounted by Android init from fstab.vita (mount_all) on the first
-# boot.
+# boot.  An ext4 cache image can be added later by attaching it to /dev/loop2
+# and changing the fstab entry.
 
-# Prefer zram, but allow the disk-backed swap to relieve real memory pressure.
-echo 60 > /proc/sys/vm/swappiness 2>/dev/null
+# A modest VM tweak for a 512 MiB device with zram.
+echo 100 > /proc/sys/vm/swappiness 2>/dev/null
 
 log "handing off to /init"
 $BB sync
