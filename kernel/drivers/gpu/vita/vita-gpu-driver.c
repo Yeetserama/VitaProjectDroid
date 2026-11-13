@@ -46,6 +46,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/mm.h>
 #include <linux/slab.h>
+#include <linux/platform_device.h>
 
 #define DRV_NAME "vita-gpu-driver"
 
@@ -140,40 +141,40 @@ static int vita_gpu_power_on(void)
 
 	if (drv->pers_misc) {
 		val = readl(drv->pers_misc + PERSIST_OFFSET_MISC_ISO);
-		pr_info("%s: gpuIsolation: 0x%08x\n", DRV_NAME, val);
+		dev_info(drv->dev, "%s: gpuIsolation: 0x%08x\n", DRV_NAME, val);
 	}
 	if (drv->pers_reset) {
 		val = readl(drv->pers_reset + PERSIST_OFFSET_GPU);
-		pr_info("%s: reset GPU: 0x%08x\n", DRV_NAME, val);
+		dev_info(drv->dev, "%s: reset GPU: 0x%08x\n", DRV_NAME, val);
 	}
 	if (drv->pers_gate) {
 		val = readl(drv->pers_gate + PERSIST_OFFSET_GPU);
-		pr_info("%s: gate GPU: 0x%08x\n", DRV_NAME, val);
+		dev_info(drv->dev, "%s: gate GPU: 0x%08x\n", DRV_NAME, val);
 	}
 	if (drv->pers_baseclk) {
 		val = readl(drv->pers_baseclk + PERSIST_OFFSET_BASECLK);
-		pr_info("%s: baseclk GPU: 0x%08x\n", DRV_NAME, val);
+		dev_info(drv->dev, "%s: baseclk GPU: 0x%08x\n", DRV_NAME, val);
 	}
 
 	/* Deassert GPU reset */
 	if (drv->pers_reset) {
 		writel(0x0, drv->pers_reset + PERSIST_OFFSET_GPU);
 		val = readl(drv->pers_reset + PERSIST_OFFSET_GPU);
-		pr_info("%s: reset now: 0x%08x\n", DRV_NAME, val);
+		dev_info(drv->dev, "%s: reset now: 0x%08x\n", DRV_NAME, val);
 	}
 
 	/* Enable GPU clock */
 	if (drv->pers_gate) {
 		writel(0x1, drv->pers_gate + PERSIST_OFFSET_GPU);
 		val = readl(drv->pers_gate + PERSIST_OFFSET_GPU);
-		pr_info("%s: gate now: 0x%08x\n", DRV_NAME, val);
+		dev_info(drv->dev, "%s: gate now: 0x%08x\n", DRV_NAME, val);
 	}
 
 	udelay(100);
 	msleep(10);
 
 	drv->powered_on = true;
-	pr_info("%s: power-on complete\n", DRV_NAME);
+	dev_info(drv->dev, "%s: power-on complete\n", DRV_NAME);
 	return 0;
 }
 
@@ -214,7 +215,7 @@ static int vita_gpu_run_init_script(void)
 	writel(0,      regs + 0x818);
 	writel(0x5e0,  regs + 0x804);
 	writel(0xffff, regs + 0x814);
-	writel(0x7c000,regs + 0xa00);
+	writel(0x7c000, regs + 0xa00);
 	writel(0x100,  regs + 0xb30);
 	writel(drv->cmd_ring_dma[0], regs + SGX_SYS_EVENT_KICKER);
 
@@ -226,7 +227,7 @@ static int vita_gpu_run_init_script(void)
 	writel(VITA_MASTER_CLK_GATE_MASK,  regs + VITA_MASTER_CLK_GATE_REG);
 	writel(VITA_MASTER_CLK_GATE2_MASK, regs + VITA_MASTER_CLK_GATE2_REG);
 
-	pr_info("%s: init script executed\n", DRV_NAME);
+	dev_info(drv->dev, "%s: init script executed\n", DRV_NAME);
 	return 0;
 }
 
@@ -243,7 +244,7 @@ static int vita_gpu_read_core_id(int core)
 		base = drv->sgx_master + ((core + SGX_CORE_BANK_BASE) * SGX_CORE_BANK_SIZE);
 
 	if (!base) {
-		pr_err("%s: SGX %s not mapped\n", DRV_NAME, tag);
+		dev_err(drv->dev, "%s: SGX %s not mapped\n", DRV_NAME, tag);
 		return -ENODEV;
 	}
 
@@ -251,16 +252,18 @@ static int vita_gpu_read_core_id(int core)
 	rev  = readl(base + SGX_SYS_CORE_REVISION);
 	config = readl(base + SGX_SYS_POWER);
 
-	pr_info("%s: SGX %s ID: 0x%08x Rev: 0x%08x Pwr: 0x%08x\n",
+	dev_info(drv->dev, "%s: SGX %s ID: 0x%08x Rev: 0x%08x Pwr: 0x%08x\n",
 		DRV_NAME, tag, id, rev, config);
 
 	if ((id & 0xF000) == 0x5000) {
-		pr_info("%s:   %s: Series5XT (0x%04x)\n", DRV_NAME, tag, id & 0xFFFF);
+		dev_info(drv->dev, "%s:   %s: Series5XT (0x%04x)\n",
+			DRV_NAME, tag, id & 0xFFFF);
 		if ((id & 0xFFFF) == 0x5430)
-			pr_info("%s:   %s: SGX543\n", DRV_NAME, tag);
+			dev_info(drv->dev, "%s:   %s: SGX543\n", DRV_NAME, tag);
 		return 0;
 	}
-	pr_warn("%s:   %s: Unexpected ID 0x%08x\n", DRV_NAME, tag, id);
+	dev_warn(drv->dev, "%s:   %s: Unexpected ID 0x%08x\n",
+		DRV_NAME, tag, id);
 	return -ENODEV;
 }
 
@@ -270,16 +273,16 @@ static int vita_gpu_cmd_ring_init(void)
 	int i;
 
 	for (i = 0; i < VITA_GPU_CMD_RING_COUNT; i++) {
-		drv->cmd_ring_cpu[i] = dma_alloc_coherent(NULL,
+		drv->cmd_ring_cpu[i] = dma_alloc_coherent(drv->dev,
 				VITA_GPU_CMD_RING_SIZE, &drv->cmd_ring_dma[i], GFP_KERNEL);
 		if (!drv->cmd_ring_cpu[i]) {
-			pr_err("%s: command ring %d alloc failed\n", DRV_NAME, i);
+			dev_err(drv->dev, "%s: command ring %d alloc failed\n", DRV_NAME, i);
 			return -ENOMEM;
 		}
 		memset(drv->cmd_ring_cpu[i], 0, VITA_GPU_CMD_RING_SIZE);
 		drv->cmd_ring_write_idx[i] = 0;
 		drv->cmd_ring_read_idx[i] = 0;
-		pr_info("%s: ring %d: cpu=0x%p dma=0x%pad size=0x%x\n",
+		dev_info(drv->dev, "%s: ring %d: cpu=0x%p dma=0x%pad size=0x%x\n",
 			DRV_NAME, i, drv->cmd_ring_cpu[i],
 			&drv->cmd_ring_dma[i], VITA_GPU_CMD_RING_SIZE);
 	}
@@ -293,7 +296,7 @@ static void vita_gpu_cmd_ring_cleanup(void)
 
 	for (i = 0; i < VITA_GPU_CMD_RING_COUNT; i++) {
 		if (drv->cmd_ring_cpu[i]) {
-			dma_free_coherent(NULL, VITA_GPU_CMD_RING_SIZE,
+			dma_free_coherent(drv->dev, VITA_GPU_CMD_RING_SIZE,
 				drv->cmd_ring_cpu[i], drv->cmd_ring_dma[i]);
 			drv->cmd_ring_cpu[i] = NULL;
 		}
@@ -306,69 +309,150 @@ static irqreturn_t vita_gpu_irq(int irq, void *dev_id)
 	u32 status, enable;
 
 	status = readl(drv->sgx_master + SGX_SYS_EVENT_HOST_EN);
-	enable = readl(drv->sgx_master + SGX_SYS_EVENT_HOST_EN);
+	enable = readl(drv->sgx_master + SGX_SYS_EVENT_HOST_ENABLE);
 	status &= enable;
-	pr_info("%s: IRQ %d: status=0x%08x enable=0x%08x\n",
+	dev_info(drv->dev, "%s: IRQ %d: status=0x%08x enable=0x%08x\n",
 		DRV_NAME, irq, status, enable);
 	writel(status, drv->sgx_master + SGX_SYS_EVENT_HOST_CLR);
 	return IRQ_HANDLED;
 }
 
-static int __init vita_gpu_probe(void)
+static int vita_gpu_probe(struct platform_device *pdev)
 {
 	struct vita_gpu_driver *drv = &g_gpu;
-	int ret, i;
+	int ret;
+	int i;
 
-	pr_info("%s: Vita SGX543MP4+ driver probe starting\n", DRV_NAME);
+	dev_info(&pdev->dev, "%s: Vita SGX543MP4+ driver probe starting\n", DRV_NAME);
 
-	drv->pers_misc   = ioremap_nocache(PERVASIVE_MISC_BASE, 0x1000);
-	if (!drv->pers_misc) { pr_err("%s: misc ioremap fail\n", DRV_NAME); return -ENOMEM; }
-	drv->pers_reset  = ioremap_nocache(PERVASIVE_RESET_BASE, 0x1000);
-	if (!drv->pers_reset) { pr_err("%s: reset ioremap fail\n", DRV_NAME); return -ENOMEM; }
-	drv->pers_gate   = ioremap_nocache(PERVASIVE_GATE_BASE, 0x1000);
-	if (!drv->pers_gate) { pr_err("%s: gate ioremap fail\n", DRV_NAME); return -ENOMEM; }
-	drv->pers_baseclk= ioremap_nocache(PERVASIVE_BASECLK_BASE, 0x1000);
-	if (!drv->pers_baseclk) { pr_err("%s: baseclk ioremap fail\n", DRV_NAME); return -ENOMEM; }
+	/* Map pervasive pages (direct MMIO) */
+	drv->pers_misc = devm_ioremap_nocache(&pdev->dev, PERVASIVE_MISC_BASE, 0x1000);
+	if (!drv->pers_misc) {
+		dev_err(&pdev->dev, "%s: misc ioremap fail\n", DRV_NAME);
+		return -ENOMEM;
+	}
+	drv->pers_reset = devm_ioremap_nocache(&pdev->dev, PERVASIVE_RESET_BASE, 0x1000);
+	if (!drv->pers_reset) {
+		dev_err(&pdev->dev, "%s: reset ioremap fail\n", DRV_NAME);
+		return -ENOMEM;
+	}
+	drv->pers_gate = devm_ioremap_nocache(&pdev->dev, PERVASIVE_GATE_BASE, 0x1000);
+	if (!drv->pers_gate) {
+		dev_err(&pdev->dev, "%s: gate ioremap fail\n", DRV_NAME);
+		return -ENOMEM;
+	}
+	drv->pers_baseclk = devm_ioremap_nocache(&pdev->dev, PERVASIVE_BASECLK_BASE, 0x1000);
+	if (!drv->pers_baseclk) {
+		dev_err(&pdev->dev, "%s: baseclk ioremap fail\n", DRV_NAME);
+		return -ENOMEM;
+	}
+
+	drv->dev = &pdev->dev;
+	platform_set_drvdata(pdev, drv);
 
 	ret = vita_gpu_power_on();
-	if (ret) { pr_err("%s: power-on failed\n", DRV_NAME); return ret; }
-
-	drv->sgx_master = ioremap_nocache(SGX_REG_BASE, SGX_REG_SIZE);
-	if (!drv->sgx_master) {
-		pr_err("%s: SGX ioremap fail\n", DRV_NAME);
-		vita_gpu_power_off(); return -ENOMEM;
+	if (ret) {
+		dev_err(&pdev->dev, "%s: power-on failed\n", DRV_NAME);
+		return ret;
 	}
-	pr_info("%s: SGX mapped at 0x%08x size 0x%x\n", DRV_NAME, SGX_REG_BASE, SGX_REG_SIZE);
+
+	drv->sgx_master = devm_ioremap_nocache(&pdev->dev, SGX_REG_BASE, SGX_REG_SIZE);
+	if (!drv->sgx_master) {
+		dev_err(&pdev->dev, "%s: SGX ioremap fail\n", DRV_NAME);
+		vita_gpu_power_off();
+		return -ENOMEM;
+	}
+	dev_info(&pdev->dev, "%s: SGX mapped at 0x%08x size 0x%x\n",
+		DRV_NAME, SGX_REG_BASE, SGX_REG_SIZE);
 
 	ret = vita_gpu_read_core_id(-1);
-	if (ret) { pr_err("%s: master ID read failed\n", DRV_NAME); vita_gpu_power_off(); return ret; }
+	if (ret) {
+		dev_err(&pdev->dev, "%s: master ID read failed\n", DRV_NAME);
+		vita_gpu_power_off();
+		return ret;
+	}
 	drv->id_verified = true;
-	for (i = 0; i < SGX_NUM_CORES; i++) vita_gpu_read_core_id(i);
+	for (i = 0; i < SGX_NUM_CORES; i++)
+		vita_gpu_read_core_id(i);
 
 	ret = vita_gpu_run_init_script();
-	if (ret) { vita_gpu_power_off(); return ret; }
+	if (ret) {
+		vita_gpu_power_off();
+		return ret;
+	}
 
 	ret = vita_gpu_cmd_ring_init();
-	if (ret) { vita_gpu_cmd_ring_cleanup(); vita_gpu_power_off(); return ret; }
+	if (ret) {
+		vita_gpu_cmd_ring_cleanup();
+		vita_gpu_power_off();
+		return ret;
+	}
 
-	ret = request_irq(52, vita_gpu_irq, 0, DRV_NAME, drv);
-	if (ret) { pr_err("%s: IRQ 52 failed\n", DRV_NAME); vita_gpu_cmd_ring_cleanup(); vita_gpu_power_off(); return ret; }
+	ret = devm_request_irq(&pdev->dev, 52, vita_gpu_irq, 0, DRV_NAME, drv);
+	if (ret) {
+		dev_err(&pdev->dev, "%s: IRQ 52 failed\n", DRV_NAME);
+		vita_gpu_cmd_ring_cleanup();
+		vita_gpu_power_off();
+		return ret;
+	}
 	drv->irq = 52;
 
-	pr_info("%s: probe complete (skeleton, no job submission)\n", DRV_NAME);
+	dev_info(&pdev->dev, "%s: probe completed (skeleton, no job submission)\n", DRV_NAME);
+	return 0;
+}
+
+static int vita_gpu_remove(struct platform_device *pdev)
+{
+	struct vita_gpu_driver *drv = platform_get_drvdata(pdev);
+
+	if (drv) {
+		vita_gpu_cmd_ring_cleanup();
+		vita_gpu_power_off();
+	}
+
+	return 0;
+}
+
+static const struct of_device_id vita_gpu_of_match[] = {
+	{ .compatible = "img,sgx543mp4" },
+	{ .compatible = "img,sgx543" },
+	{},
+};
+MODULE_DEVICE_TABLE(of, vita_gpu_of_match);
+
+static struct platform_driver vita_gpu_driver = {
+	.probe = vita_gpu_probe,
+	.remove = vita_gpu_remove,
+	.driver = {
+		.name = DRV_NAME,
+		.of_match_table = vita_gpu_of_match,
+	},
+};
+
+static int __init vita_gpu_init(void)
+{
+	struct platform_device *pdev;
+	int ret;
+
+	pdev = platform_device_register_simple(DRV_NAME, -1, NULL, 0);
+	if (IS_ERR(pdev))
+		return PTR_ERR(pdev);
+
+	ret = platform_driver_probe(&vita_gpu_driver, NULL);
+	if (ret) {
+		platform_device_unregister(pdev);
+		return ret;
+	}
+
 	return 0;
 }
 
 static void __exit vita_gpu_exit(void)
 {
-	struct vita_gpu_driver *drv = &g_gpu;
-
-	vita_gpu_cmd_ring_cleanup();
-	vita_gpu_power_off();
-	if (drv->irq >= 0) free_irq(52, drv);
+	platform_driver_unregister(&vita_gpu_driver);
 }
 
-module_init(vita_gpu_probe);
+module_init(vita_gpu_init);
 module_exit(vita_gpu_exit);
 
 MODULE_LICENSE("GPL");
