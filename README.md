@@ -13,6 +13,14 @@ kernels). The software GLES2 gate also passed on hardware: the `glbench`
 bundle rendered a launcher-like scene at about **30 fps effective** at
 960x544 with Mesa softpipe, including the fb0 present copy. Next: v0.2, the
 launcher/UI integration.
+
+**Current 5.1.1 limitation:** the launcher/UI starts, but app launches take an
+unusually long time. The system is not a usable daily driver yet. This is a
+performance and memory-pressure problem, separate from boot: the framework and
+Wi-Fi stay up. The boot now also enables a 512 MiB `ur0:/android/swap.img`
+alongside 128 MiB of zram, which gives the kernel about 1 GiB of anonymous
+memory to work with; it does not make disk swap fast.
+
 Target:
 **Android 5.1.1 (API 22) on a PCH-1000 (OLED)**, using the LinuxOnVita 6.12
 kernel, with **no SD2Vita adapter**. Firmware is **3.65 with HENkaku + Enso**;

@@ -20,12 +20,17 @@ no cache image:
 | `system.img` | 750 MB | ro loop | Android 5.1.1 system, framework, SystemUI, launcher |
 | `userdata.img` | 550 MB | rw loop | settings, app data, ART cache |
 | `/cache` | 64 MB tmpfs | RAM | dex2oat / scratch, recreated every boot |
-| **ur0 total** | **~1.3 GB** | | leaves **~1.2 GB** on a 2.5 GB partition |
+| `swap.img` | 512 MB | swapon loop | disk swap for 5.1.1 and later |
+| **ur0 total** | **~1.8 GB** | | leaves **~0.7 GB** on a 2.5 GB partition |
 
 Do not fill ur0. Keep at least **300-500 MB free** for VitaOS and exFAT metadata.
 The images are sparse files on the host, but when copied to exFAT they occupy
 their full logical size; check with `df -h /mnt/ur0` on the Vita side or with
 VitaShell's free-space display.
+
+The swap image is used by **5.1.1 and later only**. It is created on first boot
+if missing and can be deleted to reclaim 512 MB; Android then boots with zram
+only.
 
 If free space is below ~1.5 GB, the tight budget is:
 
@@ -34,7 +39,8 @@ If free space is below ~1.5 GB, the tight budget is:
 | `system.img` | 600 MB, after removing unused system apps |
 | `userdata.img` | 384 MB |
 | `/cache` | 64 MB tmpfs |
-| **ur0 total** | **~1.0 GB** |
+| `swap.img` | 512 MB (5.1.1+) |
+| **ur0 total** | **~1.5 GB** |
 
 Shrinking `system.img` requires resizing the ext4 filesystem and the file
 itself, then verifying that Android still boots. Do that only after the
@@ -46,8 +52,9 @@ unmodified image has booted once.
 Sony card ux0 (VitaOS-visible)        ur0 (Linux-visible)
   /linux/baremetal-loader.skprx         /android/system.img
   /linux/payload.bin                    /android/userdata.img
-  /linux/zImage                         /android/wpa_supplicant.conf   (optional)
-  /linux/vita.dtb                       /android/ui                    (optional)
+  /linux/zImage                         /android/swap.img              (5.1.1+)
+  /linux/vita.dtb                       /android/wpa_supplicant.conf   (optional)
+                                        /android/ui                    (optional)
                                         /android/vita-net.log          (written by Android)
 ```
 
@@ -66,7 +73,8 @@ driver.
 3. Verify `/mnt/ur0/android/system.img` and `userdata.img` exist.
 4. `losetup -r /dev/loop0 /mnt/ur0/android/system.img`
 5. `losetup /dev/loop1 /mnt/ur0/android/userdata.img`
-6. Enable 128 MiB zram swap and set `vm.swappiness=100`.
+6. Enable 128 MiB zram swap, then attach `swap.img` to `/dev/loop2`,
+   `mkswap` it, and `swapon` it. Set `vm.swappiness=60`.
 7. `exec /init`.
 
 Android's `init.vita.rc` then runs `mount_all /fstab.vita`, which mounts:
@@ -95,14 +103,24 @@ vita-storage ro ur0
 
 It can be recreated later with `alpine-chroot create`.
 
-A ur0 swapfile is unusual because `vita-swap` defaults to
-`/mnt/ux0/swapfile`, but check:
+## Swap on ur0 (5.1.1+)
+
+`/init.vita` creates `/mnt/ur0/android/swap.img` (512 MiB) on first boot and
+attaches it to `/dev/loop2`; `system.img` and `userdata.img` keep loop0 and
+loop1. The file is reused on later boots. If ur0 is full or `swapon` fails,
+boot continues with the 128 MiB zram device only.
+
+To reclaim the space, delete the image and reboot; it is recreated only when
+the boot script finds it missing:
 
 ```sh
-vita-swap status
+vita-storage rw ur0
+rm /mnt/ur0/android/swap.img
+vita-storage ro ur0
 ```
 
-Keep ZRAM. It lives in RAM and does not consume ur0.
+Keep ZRAM. It lives in RAM and does not consume ur0. Do not add a second
+swapfile on `ux0:`; the Sony card is not visible to Linux.
 
 ## Risks
 
@@ -110,10 +128,12 @@ Keep ZRAM. It lives in RAM and does not consume ur0.
   corrupt exFAT and force a VitaOS database rebuild or a restore.
 - **exFAT is not journaled.** Use clean shutdowns, keep the backup current, and
   avoid running the Android UI while the battery is low.
-- **NAND wear.** Keep userdata small, keep logs off ur0 where possible, and do
-  not put a swapfile there.
+- **NAND wear.** Android 5.1.1 and later deliberately place a fixed 512 MiB
+  swap image on ur0. That is an accepted tradeoff for surviving memory
+  pressure on a 512 MB device; do not grow it or add more swap files. Keep
+  userdata small and keep logs off ur0 where possible.
 - **512 MB RAM is the binding constraint.** Low-RAM Android, no GApps, minimal
-  apps. Expect a slow UI and possible OOM kills even with zram.
+  apps. Expect a slow UI and possible OOM kills even with zram and swap.
 - **Loop devices are not partitions.** Tools that expect a real block device
   (some `vold` paths, `fsck`, OTA) will not work unmodified.
 

@@ -248,6 +248,14 @@ Stock apps launch without ANR:
 | Settings | 1.3 s | renders |
 | Browser | 4.3 s | renders; shows a WebView error page |
 
+Those were clean, freshly booted launches. In longer interactive use, app
+launches take an unusually long time, sometimes long enough to look like a
+hang; the framework and Wi-Fi remain up. Treat 5.1.1 as not working as a daily
+driver until that is fixed. The likely contributors are Dalvik/ART
+compilation, the software renderer, and memory pressure on 512 MB. The boot
+adds a 512 MiB `ur0:/android/swap.img` (loop-backed, with zram) to reduce OOM
+pressure, but disk swap cannot make app startup fast.
+
 The Browser page is `net::ERR_NAME_NOT_RESOLVED`, not a rendering failure.
 Wi-Fi is brought up by `vita-net.sh` outside the framework: `wpa_supplicant`
 and `dhcpcd` configure `mlan0` directly, so `ConnectivityService` reports
