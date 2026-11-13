@@ -245,15 +245,15 @@ void psp2sgx_show_fdinfo(struct drm_printer *p, struct drm_file *file)
 static struct drm_gem_object *create_shmem(struct psp2sgx_device *sgx,
 					   size_t size)
 {
-	struct drm_gem_object *obj;
+	struct drm_gem_shmem_object *shmem;
 
-	obj = drm_gem_shmem_create(&sgx->drm, size);
-	if (IS_ERR(obj))
-		return ERR_CAST(obj);
-	to_psp2sgx_bo(obj)->counted = true;
-	atomic64_add(obj->size, &sgx->shmem_bytes);
+	shmem = drm_gem_shmem_create(&sgx->drm, size);
+	if (IS_ERR(shmem))
+		return ERR_CAST(shmem);
+	to_psp2sgx_bo(&shmem->base)->counted = true;
+	atomic64_add(shmem->base.size, &sgx->shmem_bytes);
 	atomic_inc(&sgx->shmem_objects);
-	return obj;
+	return &shmem->base;
 }
 
 int psp2sgx_ioctl_bo_create(struct drm_device *drm, void *data,
