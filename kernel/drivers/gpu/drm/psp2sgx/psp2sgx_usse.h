@@ -100,6 +100,8 @@ struct sgx_usse_asm {
 	u32 nfix;
 };
 
+#define SGX_USSE_MAX_LABELS	16
+
 void sgx_usse_init(struct sgx_usse_asm *a, u64 *buf, u32 cap, u32 base);
 /* Resolves the branches; returns 0 or the first error. */
 int sgx_usse_finish(struct sgx_usse_asm *a);

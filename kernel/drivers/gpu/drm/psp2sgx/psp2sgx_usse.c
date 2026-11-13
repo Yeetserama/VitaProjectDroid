@@ -285,7 +285,7 @@ void sgx_usse_add(struct sgx_usse_asm *a, enum sgx_usse_pred p,
 		  struct sgx_usse_reg dst, struct sgx_usse_reg src0,
 		  struct sgx_usse_reg src2)
 {
-	sgx_usse_imad2(a, p, dst, s0, USSE_IMM(1), s2);
+	sgx_usse_imad2(a, p, dst, src0, USSE_IMM(1), src2);
 }
 
 void sgx_usse_test(struct sgx_usse_asm *a, enum sgx_usse_pred p,
@@ -314,7 +314,7 @@ void sgx_usse_test(struct sgx_usse_asm *a, enum sgx_usse_pred p,
 		a->err = -EINVAL;
 		return;
 	}
-	if (!src12(a, src1, &b1, &x1, &n1, 7) || !src12(a, s2, &b2, &x2, &n2, 7))
+	if (!src12(a, src1, &b1, &x1, &n1, 7) || !src12(a, src2, &b2, &x2, &n2, 7))
 		return;
 	hi = 0x48080001u | (p & 7) << 24 | x1 << 17 | x2 << 16 |
 	     (u32)tests[cond][0] << 10 | (u32)tests[cond][1] << 8 |
@@ -367,14 +367,14 @@ void sgx_usse_st(struct sgx_usse_asm *a, enum sgx_usse_pred p,
 	u32 index = reg >> 2, hi, lo;
 
 	if ((reg & 3) || index >> 18 ||
-	    (dst.bank != SGX_USSE_R && dst.bank != SGX_USSE_PA) || dst.n > 127 ||
-	    (dst.bank == SGX_USSE_R && dst.n >= 124)) {
+	    (value.bank != SGX_USSE_R && value.bank != SGX_USSE_PA) || value.n > 127 ||
+	    (value.bank == SGX_USSE_R && value.n >= 124)) {
 		a->err = -EINVAL;
 		return;
 	}
 	hi = 0xfe210000u | ((index >> 14) & 0xf) << 2 |
-	     (dst.bank == SGX_USSE_PA ? 1u << 7 : 0) | drc;
-	lo = 2u << 28 | dst.n << 21 | ((index >> 7) & 0x7f) << 14 |
+	     (value.bank == SGX_USSE_PA ? 1u << 7 : 0);
+	lo = 2u << 28 | value.n << 21 | ((index >> 7) & 0x7f) << 14 |
 	     (index & 0x7f);
 	emit(a, HI(hi) | lo);
 }
@@ -385,14 +385,14 @@ void sgx_usse_ldr(struct sgx_usse_asm *a, struct sgx_usse_reg dst, u32 reg,
 	u32 index = reg >> 2, hi, lo;
 
 	if ((reg & 3) || index >> 18 ||
-	    (dst.bank != SGX_USSE_R && dst.bank != SGX_USSE_PA) || dst.n > 127 ||
-	    (dst.bank == SGX_USSE_R && dst.n >= 124)) {
+	    (value.bank != SGX_USSE_R && value.bank != SGX_USSE_PA) || value.n > 127 ||
+	    (value.bank == SGX_USSE_R && value.n >= 124)) {
 		a->err = -EINVAL;
 		return;
 	}
 	hi = 0xfe210000u | ((index >> 14) & 0xf) << 2 |
-	     (dst.bank == SGX_USSE_PA ? 1u << 7 : 0) | drc;
-	lo = 2u << 28 | dst.n << 21 | ((index >> 7) & 0x7f) << 14 |
+	     (value.bank == SGX_USSE_PA ? 1u << 7 : 0);
+	lo = 2u << 28 | value.n << 21 | ((index >> 7) & 0x7f) << 14 |
 	     (index & 0x7f);
 	emit(a, HI(hi) | lo);
 }
@@ -449,6 +449,29 @@ void sgx_usse_str_indirect(struct sgx_usse_asm *a, struct sgx_usse_reg index,
 		return;
 	}
 	emit(a, HI(0xfe280000u | x1 << 17) | b1 << 30 | b2 << 28 | n1 << 7 | n2);
+}
+
+static void fixup(struct sgx_usse_asm *a, int label, bool relative)
+{
+    if (a->nfix >= 32) {
+        a->err = -ENOSPC;
+        return;
+    }
+    a->fix[a->nfix].at = a->len;
+    a->fix[a->nfix].label = label;
+    a->fix[a->nfix].relative = relative;
+    a->nfix++;
+}
+
+static void branch_index(struct sgx_usse_asm *a, enum sgx_usse_pred p, u32 index,
+                         bool link, bool monitor)
+{
+    if (index > 0xfffff) {
+        a->err = -ERANGE;
+        return;
+    }
+    emit(a, HI(0xf8000000u | (p & 7) << 24 | (monitor ? 1u << 10 : 0) |
+               (link ? 1u << 9 : 0)) | index);
 }
 
 static void branch(struct sgx_usse_asm *a, enum sgx_usse_pred p, int label,
