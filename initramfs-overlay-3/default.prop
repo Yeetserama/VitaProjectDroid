@@ -1,0 +1,60 @@
+#
+# ADDITIONAL_DEFAULT_PROPERTIES for AndroidOnVita 3 (Honeycomb)
+#
+# ro.secure=0 + ro.adb.secure=0 make adbd run as root without authentication.
+# This is a bring-up image; do not expose port 5555 to an untrusted network.
+#
+ro.secure=0
+ro.allow.mock.location=0
+ro.debuggable=1
+ro.zygote=zygote32
+ro.adb.secure=0
+persist.sys.usb.config=adb
+service.adb.tcp.port=5555
+
+# WifiService's SDK build has no WIFI_DRIVER_MODULE_PATH, so wifi_load_driver()
+# only flips wlan.driver.status; nothing can insmod mwifiex.  Report the driver
+# as loaded so toggling Wi-Fi does not try to unload/reload it, and point the
+# framework at mlan0 instead of the emulator's default "sta" interface.
+wifi.interface=mlan0
+wlan.driver.status=ok
+
+# The SDK image only ships the emulator EGL/GLES drivers. Reporting
+# "emulator without GPU emulation" makes libEGL load the bundled software
+# renderer (/system/lib/egl/libGLES_android.so, libpixelflinger + libETC1),
+# which is GLES1-only and enough for SurfaceFlinger's RenderEngine fallback
+# and Launcher2.
+#
+# The psp2sgx DRM driver (CONFIG_DRM_PSP2SGX) is now built into the kernel
+# and a /soc/gpu node is in the DTB.  Once a Mesa gallium psp2sgx driver plus
+# gralloc/hwcomposer are ported to bionic, clear these two properties so
+# libEGL loads the hardware driver instead of the software renderer:
+#   ro.kernel.qemu=0   (or remove)
+#   ro.kernel.qemu.gles=1  (or remove)
+# Until then, keep them set so the software renderer path is used.
+ro.kernel.qemu=1
+ro.kernel.qemu.gles=0
+
+# Native panel is 960x544. Density 240 gives a 640x363 dp phone-like layout
+# instead of the 960x544 dp tablet layout that the unset default produces.
+ro.sf.lcd_density=240
+
+# The SDK image is a tablet build whose config_showNavigationBar is false,
+# and PhoneWindowManager tests qemu.hw.mainkeys to override it.  The Vita has no
+# hardware Home/Back/Menu keys, so force SystemUI's navigation bar on (0 shows
+# it, 1 would hide it).
+qemu.hw.mainkeys=0
+
+# ART heap sizing. The SDK image has no dalvik.vm.heap* properties, so ART
+# falls back to its built-in 4m start / 16m maximum, which is far too small
+# for system_server, let alone an app. These are the usual values for a
+# 512 MB device: 96 MB is the per-app growth limit, 192 MB the large-heap cap.
+dalvik.vm.heapstartsize=8m
+dalvik.vm.heapgrowthlimit=96m
+dalvik.vm.heapsize=192m
+
+dalvik.vm.dex2oat-Xms=64m
+dalvik.vm.dex2oat-Xmx=512m
+dalvik.vm.image-dex2oat-Xms=64m
+dalvik.vm.image-dex2oat-Xmx=64m
+ro.dalvik.vm.native.bridge=0

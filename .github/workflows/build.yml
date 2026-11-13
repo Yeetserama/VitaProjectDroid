@@ -2,7 +2,7 @@ name: build
 
 on:
   push:
-    branches: [ android-4.2.2 ]
+    branches: [ android-4.2.2, android-3 ]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -14,6 +14,7 @@ on:
         options:
           - '4.2'
           - '4.2.2'
+          - '3'
 
 permissions:
   contents: read
@@ -332,4 +333,207 @@ jobs:
             build/out/vita1000.dtb-2.2
             build/out/initramfs.cpio-2.2
             build/out/SHA256SUMS-2.2
-            build/out/build-info.txt-2.2
+            build/out/build-info.txt-2.2  boot-package-3:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.android_version == '3' || (github.event_name == 'push' && github.ref == 'refs/heads/android-3')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Prefer public DNS
+        run: |
+          if [ -f /etc/resolv.conf ]; then
+            sudo cp /etc/resolv.conf /etc/resolv.conf.platform
+            {
+              echo 'nameserver 1.1.1.1'
+              echo 'nameserver 8.8.8.8'
+              echo 'options timeout:2 attempts:2'
+              cat /etc/resolv.conf.platform
+            } > /tmp/resolv.conf.new
+            sudo cp /tmp/resolv.conf.new /etc/resolv.conf \
+              || echo "could not rewrite /etc/resolv.conf; keeping the platform resolver"
+          fi
+          getent hosts archive.ubuntu.com || true
+
+      - name: Install build dependencies
+        timeout-minutes: 20
+        run: |
+          apt_opts=(
+            -o Acquire::ForceIPv4=true
+            -o Acquire::Retries=5
+            -o Acquire::http::Timeout=20
+            -o Acquire::https::Timeout=20
+          )
+          packages=(
+            bc
+            bison
+            ca-certificates
+            device-tree-compiler
+            e2fsprogs
+            flex
+            gcc-arm-linux-gnueabihf
+            libelf-dev
+            libssl-dev
+            python3
+            unzip
+            xz-utils
+          )
+          for attempt in 1 2 3; do
+            echo "apt attempt \"
+            if sudo apt-get "\" update \
+               && sudo apt-get "\" install \
+                    -y --no-install-recommends "\"; then
+              exit 0
+            fi
+            echo "apt attempt \ failed; retrying"
+            sleep \
+          done
+          echo "could not install build dependencies after 3 attempts" >&2
+          exit 1
+
+      - name: Cache kernel tarball
+        uses: actions/cache@v4
+        with:
+          path: build/downloads
+          key: linux-vita-a33b819fd7174f60b1d5bcb613de565b3f046687
+
+      - name: Download Android 3 SDK images
+        run: |
+          bash scripts/download-android-3.sh
+
+      - name: Build Android 3 boot package
+        run: |
+          set +e
+          ANDROID_VERSION=3 bash scripts/build.sh 2>&1 | tee build-3.log
+          status=\
+          if [ "\" -ne 0 ]; then
+            {
+              echo "## Build failed (exit \)"
+              echo '\\\'
+              tail -n 100 build-3.log
+              echo '\\\'
+            } >> "\"
+            message=\
+            echo "::error title=Build boot package failed::\"
+            exit "\"
+          fi
+
+      - name: Upload Android 3 boot package
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-3-boot
+          if-no-files-found: error
+          path: |
+            build/out/zImage-3
+            build/out/vita.dtb-3
+            build/out/vita-selinux-disabled.dtb-3
+            build/out/vita1000.dtb-3
+            build/out/initramfs.cpio-3
+            build/out/SHA256SUMS-3
+            build/out/build-info.txt-3
+            prebuilt/system-3.img
+            prebuilt/userdata-3.img
+  boot-package-3:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.android_version == '3' || (github.event_name == 'push' && github.ref == 'refs/heads/android-3')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Prefer public DNS
+        run: |
+          if [ -f /etc/resolv.conf ]; then
+            sudo cp /etc/resolv.conf /etc/resolv.conf.platform
+            {
+              echo 'nameserver 1.1.1.1'
+              echo 'nameserver 8.8.8.8'
+              echo 'options timeout:2 attempts:2'
+              cat /etc/resolv.conf.platform
+            } > /tmp/resolv.conf.new
+            sudo cp /tmp/resolv.conf.new /etc/resolv.conf \
+              || echo "could not rewrite /etc/resolv.conf; keeping the platform resolver"
+          fi
+          getent hosts archive.ubuntu.com || true
+
+      - name: Install build dependencies
+        timeout-minutes: 20
+        run: |
+          apt_opts=(
+            -o Acquire::ForceIPv4=true
+            -o Acquire::Retries=5
+            -o Acquire::http::Timeout=20
+            -o Acquire::https::Timeout=20
+          )
+          packages=(
+            bc
+            bison
+            ca-certificates
+            device-tree-compiler
+            e2fsprogs
+            flex
+            gcc-arm-linux-gnueabihf
+            libelf-dev
+            libssl-dev
+            python3
+            unzip
+            xz-utils
+          )
+          for attempt in 1 2 3; do
+            echo "apt attempt $attempt"
+            if sudo apt-get "${apt_opts[@]}" update \
+               && sudo apt-get "${apt_opts[@]}" install \
+                    -y --no-install-recommends "${packages[@]}"; then
+              exit 0
+            fi
+            echo "apt attempt $attempt failed; retrying"
+            sleep $((attempt * 10))
+          done
+          echo "could not install build dependencies after 3 attempts" >&2
+          exit 1
+
+      - name: Cache kernel tarball
+        uses: actions/cache@v4
+        with:
+          path: build/downloads
+          key: linux-vita-a33b819fd7174f60b1d5bcb613de565b3f046687
+
+      - name: Download Android 3 SDK images
+        run: |
+          bash scripts/download-android-3.sh
+
+      - name: Build Android 3 boot package
+        run: |
+          set +e
+          ANDROID_VERSION=3 bash scripts/build.sh 2>&1 | tee build-3.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            {
+              echo "## Build failed (exit $status)"
+              echo '```'
+              tail -n 100 build-3.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            message=$(tail -n 60 build-3.log | awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }' | cut -c1-60000)
+            echo "::error title=Build boot package failed::$message"
+            exit "$status"
+          fi
+
+      - name: Upload Android 3 boot package
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-3-boot
+          if-no-files-found: error
+          path: |
+            build/out/zImage-3
+            build/out/vita.dtb-3
+            build/out/vita-selinux-disabled.dtb-3
+            build/out/vita1000.dtb-3
+            build/out/initramfs.cpio-3
+            build/out/SHA256SUMS-3
+            build/out/build-info.txt-3
+            prebuilt/system-3.img
+            prebuilt/userdata-3.img
