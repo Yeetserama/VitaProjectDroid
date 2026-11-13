@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# Download the Android 3.x (Honeycomb, API 11) SDK system image for armeabi-v7a and
+# Download the Android 3.x (Honeycomb, API 11) SDK system image and
 # prepare the files the Vita build needs.
 #
-# Source: https://dl.google.com/android/repository/sys-img/android/
-#         armeabi-v7a-11_r01.zip
+# Android 3.x system images are distributed as a Google APIs add-on
+# (google_apis-11_r01.zip) rather than a standalone sys-img archive.
+# The add-on contains images/system.img and images/ramdisk.img.
+#
+# Source: https://dl.google.com/android/repository/google_apis-11_r01.zip
 #
 # Outputs:
 #   prebuilt/ramdisk-3.img    stock ramdisk, embedded by build-initramfs.sh
@@ -19,8 +22,11 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 SDK_DIR="$ROOT/downloads/android-11"
 OUT_DIR="$ROOT/prebuilt"
-ZIP="$SDK_DIR/armeabi-v7a-11_r01.zip"
-ZIP_URL="https://dl.google.com/android/repository/sys-img/android/armeabi-v7a-11_r01.zip"
+ZIP="$SDK_DIR/google_apis-11_r01.zip"
+ZIP_URL="https://dl.google.com/android/repository/google_apis-11_r01.zip"
+ZIP_SIZE=83477179
+ZIP_SHA1="5eab5e81addee9f3576d456d205208314b5146a5"
+IMAGE_DIR="google_apis-11_r01/images"
 USERDATA_MB=512
 
 mkdir -p "$SDK_DIR" "$OUT_DIR"
@@ -55,6 +61,8 @@ SIZE=$(stat -c %s "$ZIP" 2>/dev/null || wc -c < "$ZIP")
 SHA1=$(sha1_of "$ZIP")
 echo "    size: $SIZE bytes"
 echo "    sha1: $SHA1"
+[ "$SIZE" -eq "$ZIP_SIZE" ] || die "size mismatch: expected $ZIP_SIZE, got $SIZE"
+[ "$SHA1" = "$ZIP_SHA1" ] || die "sha1 mismatch: expected $ZIP_SHA1, got $SHA1"
 
 # Extract system image and ramdisk
 EXTRACT="$SDK_DIR/extract"
@@ -63,10 +71,10 @@ mkdir -p "$EXTRACT"
 unzip -o "$ZIP" -d "$EXTRACT" >/dev/null
 
 echo "==> installing ramdisk as $OUT_DIR/ramdisk-3.img"
-cp "$EXTRACT/armeabi-v7a/ramdisk.img" "$OUT_DIR/ramdisk-3.img"
+cp "$EXTRACT/$IMAGE_DIR/ramdisk.img" "$OUT_DIR/ramdisk-3.img"
 
 echo "==> installing system image as $OUT_DIR/system-3.img"
-cp "$EXTRACT/armeabi-v7a/system.img" "$OUT_DIR/system-3.img"
+cp "$EXTRACT/$IMAGE_DIR/system.img" "$OUT_DIR/system-3.img"
 
 echo "==> creating a fresh ${USERDATA_MB} MiB ext4 userdata image"
 dd if=/dev/zero of="$OUT_DIR/userdata-3.img" bs=1M count="$USERDATA_MB" status=none
