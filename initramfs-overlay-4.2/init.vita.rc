@@ -25,8 +25,15 @@ on init
     mkdir /sys/kernel/debug 0755 root root
     mount debugfs debugfs /sys/kernel/debug
 
-    # Android 4.2 uses kernel logger - ensure /dev/logger exists
-    mkdir /dev/logger 0755 root root
+    # Android 4.2's liblog opens /dev/log/main (and friends).  The kernel
+    # logger driver creates flat /dev/log_* nodes; link the names that the
+    # API 17 userspace expects.  `on init` runs after init has replaced /dev
+    # with a fresh tmpfs, so anything /init.vita created is already gone.
+    mkdir /dev/log 0755 root log
+    symlink /dev/log_main /dev/log/main
+    symlink /dev/log_radio /dev/log/radio
+    symlink /dev/log_events /dev/log/events
+    symlink /dev/log_system /dev/log/system
 
 on fs
     # /system and /data are loop-mounted from ur0; /cache is a tmpfs.
@@ -43,6 +50,41 @@ on post-fs-data
     mkdir /data/system/devices/keylayout 0750 system system
     mkdir /data/system/devices/idc 0750 system system
 
+    # Wi-Fi state.  The framework opens the supplicant socket at
+    # /data/system/wpa_supplicant/<iface> and reads/writes the config as the
+    # system user in the wifi group.  /data/misc/wifi is normally created by
+    # init.rc, but its ownership is reset here so both root
+    # (wpa_supplicant/dhcpcd) and system_server can use it.
+    #
+    # This file is imported before init.rc's own post-fs-data block, so the
+    # parents may not exist yet on a freshly formatted userdata image; Android
+    # 4.2's mkdir builtin creates only one level.
+    mkdir /data/misc 01771 system misc
+    mkdir /data/system 0771 system system
+    mkdir /data/misc/wifi 0770 system wifi
+    chown system wifi /data/misc/wifi
+    chmod 0770 /data/misc/wifi
+
+    mkdir /data/misc/wifi/sockets 0770 system wifi
+    chown system wifi /data/misc/wifi/sockets
+    chmod 0770 /data/misc/wifi/sockets
+
+    mkdir /data/misc/dhcp 0770 dhcp dhcp
+    chown dhcp dhcp /data/misc/dhcp
+    chmod 0770 /data/misc/dhcp
+
+    mkdir /data/system/wpa_supplicant 0770 system wifi
+    chown system wifi /data/system/wpa_supplicant
+    chmod 0770 /data/system/wpa_supplicant
+
+    # WifiService refuses to start the supplicant if this file is missing or
+    # the SDK image's /system/etc/wifi template is absent.  Seed it before
+    # the framework can reach WifiStateMachine; vita-net.sh replaces it with
+    # the network block from ur0 later in boot.
+    copy /wpa_supplicant.conf /data/misc/wifi/wpa_supplicant.conf
+    chown system wifi /data/misc/wifi/wpa_supplicant.conf
+    chmod 0660 /data/misc/wifi/wpa_supplicant.conf
+
     # EventHub looks first in $ANDROID_ROOT/usr/... and then in
     # $ANDROID_DATA/system/devices/... .  /system is a read-only loop mount,
     # so point the second location at files that live on the initramfs.
@@ -57,10 +99,9 @@ on boot
     # regardless.
     loglevel 7
 
-    # Headless bring-up: keep the heavy framework stopped until explicitly
-    # requested.  `start` on the vita.ui trigger clears SVC_DISABLED again.
-    # SurfaceFlinger is gated too so a headless boot does not run the boot
-    # animation forever; the UI trigger starts it before zygote.
+    # The framework is gated so a broken UI cannot hide a working adb boot.
+    # These stops run first, then `setprop vita.ui 1` below starts
+    # SurfaceFlinger, media, and zygote through the trigger.
     stop zygote
     stop surfaceflinger
     stop media
@@ -78,18 +119,51 @@ on boot
 
     write /proc/sys/vm/swappiness 100
 
-# `adb shell setprop vita.ui 1` (or touch ur0:/android/ui and reboot) turns the
-# framework on after the core services are up.  Start SurfaceFlinger first so
-# system_server finds the composer as soon as WindowManagerService starts.
+    # This image boots straight to the launcher.  The stops above still run
+    # first so a broken UI cannot hide a working adb/headless boot; setting
+    # the property here clears SVC_DISABLED and starts the framework through
+    # the trigger below.
+    setprop vita.ui 1
+
+# `on boot` sets vita.ui=1, so the framework starts automatically.  A manual
+# `adb shell setprop vita.ui 1` also works after the core services are up.
+# Start SurfaceFlinger first so system_server finds the composer as soon as
+# WindowManagerService starts.
+#
+# The kernel fbcon used to draw printk over the Android framebuffer.  Detach
+# it before SurfaceFlinger takes the panel, and stop the init console shell.
 #
 # `start media` is not optional: AudioService runs early in system_server and
 # blocks on media.audio_flinger / media.audio_policy.  The `stop media` above
 # clears SVC_DISABLED only when init is told to start it again, so a UI boot
 # without this line hangs in "Waiting for service media.audio_flinger...".
 on property:vita.ui=1
+    stop console
+    write /sys/class/vtconsole/vtcon1/bind 0
+    loglevel 1
     start surfaceflinger
     start media
     start zygote
+
+# Android's WifiService starts these two services by name through ctl.start.
+# The SDK image has no /system/bin/wpa_supplicant, so run the glibc build from
+# the initramfs in the foreground; init tracks it for init.svc.wpa_supplicant.
+service wpa_supplicant /vita-linux/lib/ld-linux-armhf.so.3 --library-path /vita-linux/lib:/vita-linux/usr/lib /vita-linux/usr/sbin/wpa_supplicant -Dnl80211 -i mlan0 -c /data/misc/wifi/wpa_supplicant.conf -f /data/misc/wifi/wpa_supplicant.log
+    class main
+    user root
+    group root system wifi net_admin net_raw
+    disabled
+
+# libnetutils.dhcp_do_request() starts dhcpcd_mlan0 and appends
+# "-f /system/etc/dhcpcd/dhcpcd.conf mlan0".  The SDK image has no
+# /system/etc/dhcpcd/dhcpcd.conf, so the wrapper ignores those arguments and
+# supervises dhcpcd itself.  Keep it running: the framework expects
+# init.svc.dhcpcd_mlan0=running while the lease is active.
+service dhcpcd_mlan0 /system/bin/sh /vita-dhcp.sh
+    class main
+    user root
+    group root dhcp net_admin net_raw
+    disabled
 
 # Keep a synced kernel-log snapshot on ur0.  Android init sets panic_on_oops=1,
 # so a kernel oops or a critical-service crash loop can reset the Vita at any

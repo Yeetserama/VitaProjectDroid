@@ -22,7 +22,9 @@ changes for API 17.
 
 Android 4.2 requires two kernel staging drivers that were removed in Linux 6.12:
 
-1. **logger** (`CONFIG_LOG`) - Provides `/dev/logger/*` for kernel logging
+1. **logger** (`CONFIG_LOG`) - Provides the flat `/dev/log_main`, `/dev/log_radio`,
+   `/dev/log_events`, and `/dev/log_system` nodes. The 4.2 init script links the
+   `/dev/log/*` names that liblog opens to these nodes.
 2. **lowmemorykiller** (`CONFIG_ANDROID_LOW_MEMORY_KILLER`) - Kills processes based on oom_adj
 
 Both have been backported from Linux 4.19 and placed in:
@@ -88,9 +90,26 @@ The build produces version-suffixed artifacts in `build/out/`:
    The CI artifact `android-4.2.2-boot` contains both images. When building
    locally they are `prebuilt/system-4.2.img` and `prebuilt/userdata-4.2.img`.
 
-3. Create `ur0:/android/wpa_supplicant.conf` for Wi-Fi.
+3. Create `ur0:/android/wpa_supplicant.conf` for Wi-Fi:
 
-4. Boot via LinuxOnVita (press CROSS to boot the new zImage).
+   ```
+   network={
+       ssid="YourNetwork"
+       psk="YourPassword"
+       key_mgmt=WPA-PSK
+   }
+   ```
+
+   The SD8787 is 2.4 GHz only. Only the network blocks and radio settings
+   are used: at boot the port rewrites the control-interface line to
+   `ctrl_interface=DIR=/data/system/wpa_supplicant GROUP=1010` so that
+   WifiService and the supplicant share the same socket. The file on ur0 is
+   re-read on every boot, so add or change networks there; networks saved
+   through Settings are not written back to ur0.
+
+4. Boot via LinuxOnVita (press CROSS to boot the new zImage). The framework
+   and launcher start automatically, with the on-screen navigation bar
+   enabled (`qemu.hw.mainkeys=0`).
 
 ## Known Issues
 
@@ -121,11 +140,11 @@ Check kernel log:
 adb shell cat /mnt/ur0/android/boot.log
 ```
 
-Enable UI:
-```bash
-adb shell setprop vita.ui 1
-# or touch ur0:/android/ui and reboot
-```
+The UI starts automatically. `vita.ui=1` is set by `init.vita.rc` at the end
+of `on boot`, after the headless safety stops, which starts SurfaceFlinger,
+media, and zygote. For a headless debug boot, remove that `setprop` line from
+`initramfs-overlay-4.2/init.vita.rc`; `adb shell setprop vita.ui 1` still
+starts the framework manually.
 
 ## Directory Structure
 

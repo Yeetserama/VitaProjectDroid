@@ -33,7 +33,11 @@ case "$ANDROID_VERSION" in
         LOCALVERSION="-vita-android"
         ;;
     4.2)
-        BOOTARGS="earlyprintk keep_bootcon console=tty0 console=ttyS0,115200 androidboot.hardware=vita androidboot.selinux=permissive androidboot.console=tty0 androidboot.serialno=PCH1000 rdinit=/init.vita"
+        # Keep printk off the framebuffer: fbcon draws over SurfaceFlinger and
+        # there is no VT switch back to the UI.  init.vita.rc also unbinds
+        # vtcon1 when the framework starts, but booting without console=tty0
+        # and keep_bootcon avoids the boot console replay entirely.
+        BOOTARGS="earlyprintk console=ttyS0,115200 androidboot.hardware=vita androidboot.selinux=permissive androidboot.console=ttyS0 androidboot.serialno=PCH1000 rdinit=/init.vita"
         FRAGMENT="$ROOT/kernel/config/vita-android-4.2.fragment"
         LOCALVERSION="-vita-android-4.2"
         ;;

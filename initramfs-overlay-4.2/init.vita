@@ -100,7 +100,7 @@ log "initial kernel log saved (ur0:/android/boot.log); vita-log takes over"
 # Copy a readable replacement over the embedded copy before Android init
 # starts, stripping CRLF from a Windows editor.  Write to a temporary name and
 # rename, so an interrupted copy cannot leave a truncated service script.
-for f in vita-net.sh vita-log.sh vita-ui.sh; do
+for f in vita-net.sh vita-dhcp.sh vita-log.sh vita-ui.sh; do
     src=/mnt/ur0/android/$f
     [ -s "$src" ] || continue
     # Refuse anything that does not start with a shebang: an empty file, a

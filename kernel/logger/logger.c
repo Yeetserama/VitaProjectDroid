@@ -16,10 +16,12 @@
 #include <linux/poll.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
+#include <linux/uio.h>
 #include <linux/atomic.h>
 #include <linux/list.h>
 #include <linux/wait.h>
 #include <linux/sched.h>
+#include <linux/timekeeping.h>
 
 #define LOGGER_LOG_MAIN		0
 #define LOGGER_LOG_RADIO	1
@@ -146,7 +148,10 @@ out:
 static unsigned int log_poll(struct file *file, poll_table *wait)
 {
 	struct log_device *log = file->private_data;
-	unsigned int ret = 0;
+	unsigned int ret = POLLOUT | POLLWRNORM;
+
+	if (!(file->f_mode & FMODE_READ))
+		return ret;
 
 	poll_wait(file, &log->wait, wait);
 
@@ -161,20 +166,20 @@ static unsigned int log_poll(struct file *file, poll_table *wait)
 static long log_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct log_device *log = file->private_data;
-	int val;
 
 	switch (cmd) {
+	/*
+	 * Android's liblog ABI returns these values directly instead of
+	 * copying them through the ioctl argument.  logcat -g and the
+	 * LOGGER_GET_NEXT_ENTRY_LEN read loop both depend on that.
+	 */
 	case LOGGER_GET_LOG_BUF_SIZE:
-		val = atomic_read(&log->size);
-		if (copy_to_user((void __user *)arg, &val, sizeof(val)))
-			return -EFAULT;
-		return 0;
+		return atomic_read(&log->size);
 	case LOGGER_GET_LOG_LEN:
-		val = atomic_read(&log->len);
-		if (copy_to_user((void __user *)arg, &val, sizeof(val)))
-			return -EFAULT;
-		return 0;
-	case LOGGER_GET_NEXT_ENTRY_LEN:
+		return atomic_read(&log->len);
+	case LOGGER_GET_NEXT_ENTRY_LEN: {
+		long val;
+
 		mutex_lock(&log->lock);
 		if (list_empty(&log->head))
 			val = 0;
@@ -187,9 +192,8 @@ static long log_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				val = msg->entry_v1->len + sizeof(struct logger_entry);
 		}
 		mutex_unlock(&log->lock);
-		if (copy_to_user((void __user *)arg, &val, sizeof(val)))
-			return -EFAULT;
-		return 0;
+		return val;
+	}
 	case LOGGER_FLUSH_LOG:
 		mutex_lock(&log->lock);
 		while (!list_empty(&log->head)) {
@@ -222,9 +226,102 @@ static int log_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
+/*
+ * Android's circular logger overwrites the oldest entries when the buffer is
+ * full.  Make room for a new entry the same way instead of failing writes.
+ * Called with log->lock held.
+ */
+static void log_make_room_locked(struct log_device *log, size_t needed)
+{
+	while (atomic_read(&log->len) + needed > atomic_read(&log->size)) {
+		struct log_msg *msg;
+		size_t entry_len;
+
+		if (list_empty(&log->head))
+			break;
+
+		msg = list_first_entry(&log->head, struct log_msg, entry);
+		if (msg->entry_v2) {
+			entry_len = msg->entry_v2->len + msg->entry_v2->hdr_size;
+			kfree(msg->entry_v2);
+		} else {
+			entry_len = msg->entry_v1->len + sizeof(struct logger_entry);
+			kfree(msg->entry_v1);
+		}
+		list_del(&msg->entry);
+		atomic_sub(entry_len, &log->len);
+		kfree(msg);
+	}
+}
+
+/*
+ * Android 4.2's liblog does not pass a logger_entry header.  It writes three
+ * iovecs (priority byte, tag+NUL, message+NUL) and expects the kernel to
+ * build the header.  writev() only reaches the driver through write_iter();
+ * without it, 6.12 falls back to calling write() once per iovec.
+ */
+static ssize_t log_write_iter(struct kiocb *iocb, struct iov_iter *from)
+{
+	struct log_device *log = iocb->ki_filp->private_data;
+	struct logger_entry *entry;
+	struct log_msg *log_msg;
+	struct timespec64 ts;
+	size_t count = iov_iter_count(from);
+	size_t payload_len, entry_size;
+
+	/* Null writes succeed, matching the original logger driver. */
+	if (!count)
+		return 0;
+
+	payload_len = min_t(size_t, count, LOGGER_ENTRY_MAX_PAYLOAD);
+	entry_size = sizeof(*entry) + payload_len;
+
+	entry = kzalloc(entry_size, GFP_KERNEL);
+	if (!entry)
+		return -ENOMEM;
+
+	ktime_get_real_ts64(&ts);
+	entry->len = payload_len;
+	entry->__pad = 0;
+	entry->pid = current->tgid;
+	entry->tid = current->pid;
+	entry->sec = ts.tv_sec;
+	entry->nsec = ts.tv_nsec;
+
+	if (copy_from_iter(entry->msg, payload_len, from) != payload_len) {
+		kfree(entry);
+		return -EFAULT;
+	}
+
+	log_msg = kmalloc(sizeof(*log_msg), GFP_KERNEL);
+	if (!log_msg) {
+		kfree(entry);
+		return -ENOMEM;
+	}
+	INIT_LIST_HEAD(&log_msg->entry);
+	log_msg->entry_v1 = entry;
+	log_msg->entry_v2 = NULL;
+
+	mutex_lock(&log->lock);
+	log_make_room_locked(log, entry_size);
+	if (atomic_read(&log->len) + entry_size > atomic_read(&log->size)) {
+		mutex_unlock(&log->lock);
+		kfree(entry);
+		kfree(log_msg);
+		return -ENOSPC;
+	}
+	list_add_tail(&log_msg->entry, &log->head);
+	atomic_add(entry_size, &log->len);
+	wake_up_interruptible(&log->wait);
+	mutex_unlock(&log->lock);
+
+	return payload_len;
+}
+
 static const struct file_operations log_fops = {
 	.owner = THIS_MODULE,
 	.read = log_read,
+	.write_iter = log_write_iter,
 	.poll = log_poll,
 	.unlocked_ioctl = log_ioctl,
 	.open = log_open,
@@ -336,8 +433,15 @@ static int __init log_init_one(struct log_device *log, int idx, int size)
 	if (ret)
 		return ret;
 
+	/*
+	 * Keep the device names flat.  Android's ueventd rule is
+	 * /dev/log/*, but the logger class nodes themselves must be
+	 * /dev/log_main etc.; a nested "logger/log_main" name becomes
+	 * /dev/logger!log_main after init replaces /dev with a fresh tmpfs.
+	 * init.vita.rc links the API 17 /dev/log/* names to these nodes.
+	 */
 	log->device = device_create(log_class, NULL, MKDEV(MAJOR(log_dev), idx),
-				    NULL, "logger/%s", log_names[idx]);
+				    NULL, "%s", log_names[idx]);
 	if (IS_ERR(log->device)) {
 		cdev_del(&log->cdev);
 		return PTR_ERR(log->device);

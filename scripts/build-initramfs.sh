@@ -110,7 +110,7 @@ cp -a "$OVERLAY/." "$STAGE/"
 
 # A Git checkout on Windows does not preserve execute bits.  Restore them here
 # so the checks below do not fail on an otherwise correct tree.
-chmod 0755 "$STAGE/init.vita" "$STAGE/vita-log.sh" "$STAGE/vita-net.sh" "$STAGE/vita-ui.sh" 2>/dev/null || true
+chmod 0755 "$STAGE/init.vita" "$STAGE/vita-log.sh" "$STAGE/vita-net.sh" "$STAGE/vita-ui.sh" "$STAGE/vita-dhcp.sh" 2>/dev/null || true
 
 echo "==> installing busybox"
 mkdir -p "$STAGE/sbin" "$STAGE/bin"
@@ -171,6 +171,14 @@ case "$ANDROID_VERSION" in
         # ramdisk ships none of those files.
         ;;
 esac
+case "$ANDROID_VERSION" in
+    4.2)
+        REQUIRED_FILES="$REQUIRED_FILES
+    $STAGE/vita-dhcp.sh
+    $STAGE/wpa_supplicant.conf
+"
+        ;;
+esac
 for path in $REQUIRED_FILES; do
     # Use -L as well: bin/sh is an absolute symlink to /sbin/busybox, and -e
     # on the build host would follow it into the host's own root filesystem.
@@ -181,6 +189,11 @@ done
 [ -x "$STAGE/vita-log.sh" ] || die "vita-log.sh is not executable"
 [ -x "$STAGE/vita-net.sh" ] || die "vita-net.sh is not executable"
 [ -x "$STAGE/vita-ui.sh" ] || die "vita-ui.sh is not executable"
+case "$ANDROID_VERSION" in
+    4.2)
+        [ -x "$STAGE/vita-dhcp.sh" ] || die "vita-dhcp.sh is not executable"
+        ;;
+esac
 [ -x "$STAGE/vita-linux/usr/sbin/wpa_supplicant" ] || die "wpa_supplicant is not executable"
 
 echo "==> packing newc cpio"

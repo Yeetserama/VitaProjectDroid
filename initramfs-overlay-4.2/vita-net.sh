@@ -1,6 +1,8 @@
 #!/system/bin/sh
-# Bring up the SD8787 Wi-Fi using the glibc wpa_supplicant bundled in the
-# initramfs at /vita-linux.  Runs as a oneshot late_start service.
+# Bring up the SD8787 Wi-Fi.  wpa_supplicant and dhcpcd are init services so
+# Android's WifiService can start/stop/control the same instances; this script
+# only generates the config from ur0, starts those services, repairs routing,
+# publishes DNS properties, and watches the link.
 #
 # Android 4.2 version - simplified from 5.1 v6 since netd routing behavior differs.
 
@@ -12,14 +14,14 @@ export PATH
 CONF=/mnt/ur0/android/wpa_supplicant.conf
 IFACE=mlan0
 WORK=/data/misc/wifi
-CTRL_CONF=$WORK/vita-wpa.conf
-APSCAN_CONF=$WORK/vita-wpa-apscan2.conf
+CTRL_DIR=/data/system/wpa_supplicant
+CTRL_CONF=$WORK/wpa_supplicant.conf
+APSCAN_CONF=$WORK/wpa_supplicant-apscan.conf
 LOG=$WORK/vita-net.log
 UR0=/mnt/ur0/android
 UR0_LOG=$UR0/vita-net.log
 WPA_LOG=$WORK/wpa_supplicant.log
 UR0_WPA_LOG=$UR0/wpa_supplicant.log
-WPA_PID=/dev/vita-wpa.pid
 STATE_TMP=$WORK/vita-net-state.tmp
 
 log() {
@@ -139,6 +141,9 @@ append_state() {
 }
 
 console_banner() {
+    # Writing to /dev/tty0 with fbcon bound paints text over SurfaceFlinger.
+    # The banner is only useful for a headless boot.
+    [ "$(getprop vita.ui 2>/dev/null)" = "1" ] && return 0
     [ -e /dev/tty0 ] || mknod /dev/tty0 c 4 0 2>/dev/null
     [ -c /dev/tty0 ] || return 0
     banner_ip=$(iface_ip)
@@ -225,6 +230,30 @@ have_lease() {
     /sbin/busybox ifconfig "$IFACE" 2>/dev/null | grep -q 'inet addr:'
 }
 
+supplicant_running() {
+    [ "$(getprop init.svc.wpa_supplicant 2>/dev/null)" = "running" ]
+}
+
+# system_server's WifiStateMachine takes over supplicant/DHCP management when
+# the framework is up.  The late-start watchdog must not restart a supplicant
+# that the user (or WifiService) intentionally stopped.
+framework_owns_wifi() {
+    [ "$(getprop sys.boot_completed 2>/dev/null)" = "1" ]
+}
+
+# Android 4.2's bionic resolver reads the legacy net.dns1/net.dns2 properties.
+# The SDK dhcpcd hooks only set dhcp.<iface>.dns*, so publish them here (and
+# from vita-dhcp.sh) whenever a lease is installed.
+set_dns_props() {
+    dns1=$(getprop "dhcp.$IFACE.dns1" 2>/dev/null)
+    dns2=$(getprop "dhcp.$IFACE.dns2" 2>/dev/null)
+    setprop "net.$IFACE.dns1" "$dns1" 2>/dev/null
+    setprop "net.$IFACE.dns2" "$dns2" 2>/dev/null
+    setprop net.dns1 "$dns1" 2>/dev/null
+    setprop net.dns2 "$dns2" 2>/dev/null
+    log "DNS: ${dns1:-none} ${dns2:-}"
+}
+
 state_block() {
     {
         echo "vita-net: --- $IFACE state ---"
@@ -266,63 +295,71 @@ wpa_events() {
 }
 
 stop_wpa() {
-    if [ -f "$WPA_PID" ]; then
-        pid=$(cat "$WPA_PID" 2>/dev/null)
-        if [ -n "$pid" ] && grep -q 'wpa_supplicant' "/proc/$pid/cmdline" 2>/dev/null; then
-            kill "$pid" 2>/dev/null
-            sleep 2
-            kill -9 "$pid" 2>/dev/null
-        fi
-        rm -f "$WPA_PID"
-    fi
-    rm -f "$WORK/sockets/$IFACE" "$WORK/sockets/global" 2>/dev/null
+    state=$(getprop init.svc.wpa_supplicant 2>/dev/null)
+    case "$state" in
+    running|restarting)
+        log "stopping init wpa_supplicant service"
+        setprop ctl.stop wpa_supplicant
+        i=0
+        while [ $i -lt 10 ]; do
+            [ "$(getprop init.svc.wpa_supplicant 2>/dev/null)" = "stopped" ] && return 0
+            sleep 1
+            i=$((i + 1))
+        done
+        log "wpa_supplicant did not stop (state=$(getprop init.svc.wpa_supplicant 2>/dev/null))"
+        ;;
+    esac
+    return 0
 }
 
 start_wpa() {
-    conf=$1
-    tag=$2
+    tag=$1
     : > "$WPA_LOG"
-    log "starting wpa_supplicant ($tag)"
-    /vita-linux/lib/ld-linux-armhf.so.3 \
-        --library-path /vita-linux/lib:/vita-linux/usr/lib \
-        /vita-linux/usr/sbin/wpa_supplicant \
-        -B -Dnl80211 -i "$IFACE" -c "$conf" -d -t -P "$WPA_PID" \
-        -f "$WPA_LOG" >> "$LOG" 2>&1
+    log "starting init wpa_supplicant ($tag)"
+    setprop ctl.start wpa_supplicant
 
     i=0
     while [ $i -lt 15 ]; do
-        [ -S "$WORK/sockets/$IFACE" ] && break
+        [ -S "$CTRL_DIR/$IFACE" ] && break
         sleep 1
         i=$((i + 1))
     done
-    if [ -S "$WORK/sockets/$IFACE" ]; then
+    if [ -S "$CTRL_DIR/$IFACE" ]; then
         log "wpa_supplicant control socket ready"
     else
-        log "no wpa_supplicant control socket after 15 s; see $WPA_LOG"
+        log "no wpa_supplicant socket at $CTRL_DIR/$IFACE after 15 s (state=$(getprop init.svc.wpa_supplicant 2>/dev/null)); see $WPA_LOG"
     fi
     sync_wpa_log
 }
 
 stop_dhcp() {
-    pidfile=/data/misc/dhcp/dhcpcd-$IFACE.pid
-    if [ -f "$pidfile" ]; then
-        pid=$(cat "$pidfile" 2>/dev/null)
-        if [ -n "$pid" ] && grep -q 'dhcpcd' "/proc/$pid/cmdline" 2>/dev/null; then
-            kill "$pid" 2>/dev/null
-        fi
-        rm -f "$pidfile"
-    fi
+    state=$(getprop init.svc.dhcpcd_mlan0 2>/dev/null)
+    case "$state" in
+    running|restarting)
+        log "stopping init dhcpcd_mlan0 service"
+        setprop ctl.stop dhcpcd_mlan0
+        i=0
+        while [ $i -lt 10 ]; do
+            [ "$(getprop init.svc.dhcpcd_mlan0 2>/dev/null)" = "stopped" ] && return 0
+            sleep 1
+            i=$((i + 1))
+        done
+        log "dhcpcd_mlan0 did not stop (state=$(getprop init.svc.dhcpcd_mlan0 2>/dev/null))"
+        ;;
+    esac
+    return 0
 }
 
 dhcp_once() {
     stop_dhcp
-    log "starting dhcpcd (one instance)"
-    /system/bin/dhcpcd -b -q "$IFACE" >> "$LOG" 2>&1
+    log "starting init dhcpcd_mlan0 service"
+    setprop ctl.start dhcpcd_mlan0
 
     n=0
     while [ $n -lt 40 ]; do
         if have_lease; then
             log "DHCP lease on $IFACE after ${n}s"
+            set_dns_props
             state_block
             repair_routing
             ensure_adb
@@ -337,7 +374,7 @@ dhcp_once() {
         sleep 2
         n=$((n + 2))
     done
-    log "dhcpcd gave no lease on $IFACE after 40 s"
+    log "dhcpcd_mlan0 gave no lease on $IFACE after 40 s (state=$(getprop init.svc.dhcpcd_mlan0 2>/dev/null))"
     return 1
 }
 
@@ -346,6 +383,14 @@ wait_for_carrier() {
     label=$2
     n=0
     while [ $n -lt "$seconds" ]; do
+        if ! supplicant_running; then
+            if framework_owns_wifi; then
+                log "$label: supplicant is not running; WifiService owns Wi-Fi now"
+                return 2
+            fi
+            log "$label: supplicant exited unexpectedly"
+            return 1
+        fi
         if [ "$(carrier)" = "1" ]; then
             log "$label: carrier=1 after ${n}s"
             return 0
@@ -367,9 +412,33 @@ wait_for_carrier() {
 
 watch_link() {
     was_down=0
+    was_idle=0
     last_sync=$(now_s)
     while :; do
         now=$(now_s)
+
+        # Once boot_completed is set, WifiStateMachine manages the radio.
+        # WifiService stops the supplicant when Wi-Fi is turned off; a crash
+        # is restarted by init and does not stay "stopped".  Never start or
+        # stop the framework's services from here; only keep the legacy DNS
+        # properties and the main routing rule in sync.
+        if framework_owns_wifi; then
+            if ! supplicant_running; then
+                if [ "$was_idle" -eq 0 ]; then
+                    log "watchdog: supplicant stopped; WifiService owns the radio, idling"
+                    was_idle=1
+                fi
+            else
+                was_idle=0
+                if have_lease; then
+                    set_dns_props
+                    routing_ok || repair_routing
+                fi
+            fi
+            sleep 15
+            continue
+        fi
+        was_idle=0
 
         if [ ! -e "/sys/class/net/$IFACE" ]; then
             if [ "$was_down" -eq 0 ]; then
@@ -387,7 +456,7 @@ watch_link() {
             was_down=0
             /sbin/busybox ifconfig "$IFACE" up >> "$LOG" 2>&1
             stop_wpa
-            start_wpa "$CTRL_CONF" "watchdog reconnect"
+            start_wpa "watchdog reconnect"
             if wait_for_carrier 40 "watchdog reconnect"; then
                 dhcp_once || true
             fi
@@ -412,7 +481,7 @@ watch_link() {
             else
                 log "watchdog: carrier did not return; restarting the supplicant"
                 stop_wpa
-                start_wpa "$CTRL_CONF" "watchdog restart"
+                start_wpa "watchdog restart"
                 if wait_for_carrier 40 "watchdog restart"; then
                     dhcp_once || true
                 fi
@@ -449,6 +518,38 @@ watch_link() {
     done
 }
 
+# Rewrite a supplicant config so the control socket lives where Android 4.2
+# expects it.  WifiService opens /data/system/wpa_supplicant/<iface> and runs
+# as uid 1000 (not root), so the socket must be group wifi.  The DIR=... GROUP=
+# form is the only way to make wpa_supplicant chgrp the socket; a plain
+# ctrl_interface=<dir> would leave it root:root 0770.  There is no /etc/group
+# in this initramfs, so use the numeric wifi gid (1010).
+generate_ctrl_conf() {
+    src=$1
+    {
+        if [ -n "$src" ] && [ -f "$src" ]; then
+            tr -d '\r' < "$src" \
+                | grep -v -e '^[[:space:]]*ctrl_interface[[:space:]]*=' \
+                          -e '^[[:space:]]*ctrl_interface_group[[:space:]]*=' \
+                          -e '^[[:space:]]*update_config[[:space:]]*=' \
+                          -e '^[[:space:]]*disable_scan_offload[[:space:]]*=' \
+                          -e '^[[:space:]]*ap_scan[[:space:]]*='
+            echo
+        fi
+        echo "ctrl_interface=DIR=$CTRL_DIR GROUP=1010"
+        echo "update_config=1"
+        echo "disable_scan_offload=1"
+        if [ -n "$src" ] && [ -f "$src" ] \
+            && ! tr -d '\r' < "$src" | grep -qi '^[[:space:]]*country[[:space:]]*='; then
+            echo "country=IE"
+        fi
+    } > "$CTRL_CONF.new"
+    mv -f "$CTRL_CONF.new" "$CTRL_CONF"
+    chown 1000:1010 "$CTRL_CONF" 2>/dev/null
+    chmod 0660 "$CTRL_CONF" 2>/dev/null
+    sync_logs
+}
+
 build_apscan_conf() {
     {
         echo "ap_scan=2"
@@ -477,7 +578,9 @@ build_apscan_conf() {
     } > "$APSCAN_CONF" 2>/dev/null
 }
 
-mkdir -p "$WORK" "$WORK/sockets" /data/misc/dhcp /data/misc/dhcpcd 2>/dev/null
+mkdir -p "$WORK" "$WORK/sockets" "$CTRL_DIR" /data/misc/dhcp /data/misc/dhcpcd 2>/dev/null
+chown 1000:1010 "$CTRL_DIR" 2>/dev/null
+chmod 0770 "$CTRL_DIR" 2>/dev/null
 chown 1014:1014 /data/misc/dhcp /data/misc/dhcpcd 2>/dev/null
 chmod 0770 /data/misc/dhcp /data/misc/dhcpcd 2>/dev/null
 
@@ -490,14 +593,25 @@ mkdir -p "$UR0" 2>/dev/null
 log "starting (Android 4.2.2)"
 log "adbd tcp port: $(getprop service.adb.tcp.port 2>/dev/null)"
 
-if [ ! -f "$CONF" ]; then
-    log "no $CONF; Wi-Fi skipped"
-    exit 0
-fi
-
 if [ ! -x /vita-linux/lib/ld-linux-armhf.so.3 ] || [ ! -x /vita-linux/usr/sbin/wpa_supplicant ]; then
     log "glibc wpa_supplicant is missing from the initramfs; Wi-Fi skipped"
     exit 1
+fi
+
+# Generate the supplicant config before waiting for the interface so
+# WifiService always finds a usable /data/misc/wifi/wpa_supplicant.conf, even
+# when ur0 has no network list yet.  init.vita.rc seeds the template at
+# post-fs-data; this pass only adds the control-socket settings.
+if [ -f "$CONF" ]; then
+    log "using $CONF"
+    generate_ctrl_conf "$CONF"
+else
+    log "no $CONF; keeping the seeded supplicant config"
+    generate_ctrl_conf ""
+fi
+
+if ! grep -q '^[[:space:]]*network[[:space:]]*=' "$CTRL_CONF"; then
+    log "no network block in $CTRL_CONF; the framework can add one from Settings"
 fi
 
 i=0
@@ -521,23 +635,6 @@ log "using interface $IFACE"
 stop_wpa
 stop_dhcp
 
-{
-    tr -d '\r' < "$CONF" \
-        | grep -v -e '^[[:space:]]*ctrl_interface[[:space:]]*=' \
-                  -e '^[[:space:]]*disable_scan_offload[[:space:]]*=' \
-                  -e '^[[:space:]]*ap_scan[[:space:]]*='
-    echo
-    echo "ctrl_interface=$WORK/sockets"
-    echo "disable_scan_offload=1"
-    if ! tr -d '\r' < "$CONF" | grep -qi '^[[:space:]]*country[[:space:]]*='; then
-        echo "country=IE"
-    fi
-} > "$CTRL_CONF"
-
-if ! grep -q '^[[:space:]]*network[[:space:]]*=' "$CTRL_CONF"; then
-    log "no network block in $CONF; Wi-Fi skipped"
-    exit 1
-fi
 log "config: $(grep -m1 '^[[:space:]]*ssid[[:space:]]*=' "$CTRL_CONF" | sed 's/^[[:space:]]*//') (psk hidden)"
 country=$(grep -m1 '^[[:space:]]*country[[:space:]]*=' "$CTRL_CONF" | sed 's/^[[:space:]]*//')
 log "config: ${country:-country: none}"
@@ -550,9 +647,15 @@ log "bringing $IFACE up"
 /sbin/busybox ifconfig "$IFACE" up >> "$LOG" 2>&1
 state_block
 
-start_wpa "$CTRL_CONF" "normal scan, scan offload disabled"
-if wait_for_carrier 50 "normal scan"; then
+start_wpa "normal scan, scan offload disabled"
+rc=0
+wait_for_carrier 50 "normal scan" || rc=$?
+if [ "$rc" -eq 0 ]; then
     dhcp_once || true
+elif [ "$rc" -eq 2 ]; then
+    log "WifiService stopped the supplicant; leaving Wi-Fi to the framework"
+    sync_wpa_log
+    exit 0
 else
     log "association did not complete with normal scanning; trying ap_scan=2"
     tail -n 1000 "$WPA_LOG" > "$UR0/wpa_supplicant.normal.log.new" 2>/dev/null \
@@ -561,9 +664,18 @@ else
     stop_wpa
     build_apscan_conf
     if grep -q '^ap_scan=2$' "$APSCAN_CONF"; then
-        start_wpa "$APSCAN_CONF" "ap_scan=2 fallback"
-        if wait_for_carrier 40 "ap_scan=2"; then
+        cp -f "$APSCAN_CONF" "$CTRL_CONF"
+        chown 1000:1010 "$CTRL_CONF" 2>/dev/null
+        chmod 0660 "$CTRL_CONF" 2>/dev/null
+        start_wpa "ap_scan=2 fallback"
+        rc=0
+        wait_for_carrier 40 "ap_scan=2" || rc=$?
+        if [ "$rc" -eq 0 ]; then
             dhcp_once || true
+        elif [ "$rc" -eq 2 ]; then
+            log "WifiService stopped the supplicant; leaving Wi-Fi to the framework"
+            sync_wpa_log
+            exit 0
         fi
     else
         log "could not build $APSCAN_CONF; skipping the fallback"
