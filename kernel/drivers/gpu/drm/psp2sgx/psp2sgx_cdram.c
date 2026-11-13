@@ -157,8 +157,6 @@ static int cdram_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
 	unsigned long size = vma->vm_end - vma->vm_start;
 	unsigned long pgoff;
 
-	if (vma_is_cow_mapping(vma))
-		return -EINVAL;
 	/* drm_gem_mmap() and drm_gem_prime_mmap() leave the fake offset in */
 	vma->vm_pgoff -= drm_vma_node_start(&obj->vma_node);
 	pgoff = vma->vm_pgoff;
@@ -197,7 +195,7 @@ static struct sg_table *cdram_map_dma_buf(struct dma_buf_attachment *attach,
 	if (!attach->peer2peer)
 		return ERR_PTR(-EOPNOTSUPP);
 
-	sgt = kzalloc_obj(*sgt);
+	sgt = kzalloc(sizeof(*sgt), GFP_KERNEL);
 	if (!sgt)
 		return ERR_PTR(-ENOMEM);
 	err = sg_alloc_table(sgt, 1, GFP_KERNEL);
@@ -291,7 +289,7 @@ struct drm_gem_object *psp2sgx_cdram_create(struct psp2sgx_device *sgx,
 	if (!c->size)
 		return ERR_PTR(-ENOSPC);
 	size = PAGE_ALIGN(size);
-	cbo = kzalloc_obj(*cbo);
+	cbo = kzalloc(sizeof(*cbo), GFP_KERNEL);
 	if (!cbo)
 		return ERR_PTR(-ENOMEM);
 
