@@ -22,7 +22,8 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 
-#include "psp2sgx_usse.h"
+#include "psp2sgx_mk.h"
+#include "psp2sgx_regs.h"
 
 #define R(n)	USSE_R(n)
 #define IMM(n)	USSE_IMM(n)

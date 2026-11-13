@@ -152,6 +152,9 @@ void sgx_usse_ld(struct sgx_usse_asm *a, enum sgx_usse_pred p,
  */
 void sgx_usse_st(struct sgx_usse_asm *a, enum sgx_usse_pred p, u32 reg,
 		 struct sgx_usse_reg offset, struct sgx_usse_reg value);
+/* SGX register at byte offset `reg` = src (short predicate, no offset). */
+void sgx_usse_str(struct sgx_usse_asm *a, enum sgx_usse_pred p, u32 reg,
+		  struct sgx_usse_reg src);
 /* dst = SGX register at byte offset `reg` (LDR); valid after
  * sgx_usse_wdf(drc).
  */

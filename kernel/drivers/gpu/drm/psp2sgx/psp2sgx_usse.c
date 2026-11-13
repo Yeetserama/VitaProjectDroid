@@ -429,7 +429,7 @@ void sgx_usse_str(struct sgx_usse_asm *a, enum sgx_usse_pred p, u32 reg,
 		return;
 	}
 	hi = 0xfe290000u | x1 << 17 | sp << 9 | ((index >> 14) & 0xf) << 2;
-	lo = b1 << 30 | b2 << 28 | ((index >> 7) & 0x7f) << 14 |
+	lo = b1 << 30 | n1 << 21 | ((index >> 7) & 0x7f) << 14 |
 	     (index & 0x7f);
 	emit(a, HI(hi) | lo);
 }
