@@ -182,7 +182,7 @@ static const struct drm_gem_object_funcs psp2sgx_shmem_funcs = {
 struct drm_gem_object *psp2sgx_gem_create_object(struct drm_device *drm,
 						 size_t size)
 {
-	struct psp2sgx_shmem_bo *sbo = kzalloc_obj(*sbo);
+	struct psp2sgx_shmem_bo *sbo = kzalloc(sizeof(*sbo), GFP_KERNEL);
 
 	if (!sbo)
 		return ERR_PTR(-ENOMEM);
@@ -236,8 +236,8 @@ void psp2sgx_show_fdinfo(struct drm_printer *p, struct drm_file *file)
 	spin_unlock(&file->table_lock);
 
 	for (i = 0; i < ARRAY_SIZE(region); i++)
-		drm_print_memory_stats(p, &stats[i], DRM_GEM_OBJECT_RESIDENT |
-				       DRM_GEM_OBJECT_ACTIVE, region[i]);
+		drm_print_memory_stats(p, &stats[i], DRM_GEM_OBJECT_RESIDENT,
+				       region[i]);
 }
 
 /* ---------------------------------------------------------------- ioctls */
@@ -253,7 +253,7 @@ static struct drm_gem_object *create_shmem(struct psp2sgx_device *sgx,
 	to_psp2sgx_bo(&shmem->base)->counted = true;
 	atomic64_add(shmem->base.size, &sgx->shmem_bytes);
 	atomic_inc(&sgx->shmem_objects);
-	return &shmem->base.base;
+	return &shmem->base;
 }
 
 int psp2sgx_ioctl_bo_create(struct drm_device *drm, void *data,
