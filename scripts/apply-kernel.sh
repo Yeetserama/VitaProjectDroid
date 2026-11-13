@@ -8,6 +8,7 @@
 #   CROSS_COMPILE   default arm-linux-gnueabihf-
 #   JOBS            default nproc
 #   ANDROID_VERSION 5.1 or 6.0 (default 5.1)
+#   BT_DIAG         1 to build the re/bt read-only SD8787 probe (default 0)
 
 set -euo pipefail
 
@@ -16,8 +17,10 @@ KERNEL_SRC=${1:-"$ROOT/build/linux_vita"}
 INITRAMFS=${2:-"$ROOT/build/initramfs.cpio"}
 OUT=${3:-"$ROOT/build/out"}
 ANDROID_VERSION=${4:-"5.1"}
+BT_DIAG=${BT_DIAG:-0}
 
 echo "apply-kernel.sh: ANDROID_VERSION=$ANDROID_VERSION"
+echo "apply-kernel.sh: BT_DIAG=$BT_DIAG"
 echo "apply-kernel.sh: KERNEL_SRC=$KERNEL_SRC"
 echo "apply-kernel.sh: INITRAMFS=$INITRAMFS"
 echo "apply-kernel.sh: OUT=$OUT"
@@ -86,6 +89,12 @@ cp -a "$ROOT/kernel/ashmem" "$KERNEL_SRC/drivers/misc/ashmem"
 echo "==> wiring ashmem and Vita DTBs into the tree"
 python3 "$ROOT/scripts/patch-kernel-tree.py" "$KERNEL_SRC"
 
+if [ "$BT_DIAG" = "1" ]; then
+    echo "==> applying read-only btmrvl diagnostic patch"
+    python3 "$ROOT/scripts/patch-btmrvl-diag.py" \
+        "$KERNEL_SRC/drivers/bluetooth/btmrvl_sdio.c"
+fi
+
 grep -qF -- '-DBINDER_IPC_32BIT' "$KERNEL_SRC/drivers/android/Makefile" \
     || die "drivers/android/Makefile does not select the 32-bit binder ABI"
 
@@ -97,9 +106,14 @@ make -C "$KERNEL_SRC" ARCH="$ARCH" CROSS_COMPILE="$CROSS_COMPILE" vita_defconfig
 # instead of treating it as a gen_init_cpio file list.
 cp "$INITRAMFS" "$KERNEL_SRC/vita-initramfs.cpio"
 
+FRAGMENTS=("$KERNEL_SRC/.config" "$FRAGMENT")
+if [ "$BT_DIAG" = "1" ]; then
+    FRAGMENTS+=("$ROOT/kernel/config/vita-bt-diag.fragment")
+fi
+
 "$KERNEL_SRC/scripts/kconfig/merge_config.sh" \
     -m -O "$KERNEL_SRC" \
-    "$KERNEL_SRC/.config" "$FRAGMENT"
+    "${FRAGMENTS[@]}"
 
 make -C "$KERNEL_SRC" ARCH="$ARCH" CROSS_COMPILE="$CROSS_COMPILE" olddefconfig
 
@@ -156,9 +170,16 @@ done
 # btmrvl_sdio shares the SD8787 firmware with mwifiex.  If it binds, its
 # probe blocks for ~100 s waiting for a BT image, then fails and resets the
 # card, taking Wi-Fi down every ~2 minutes.  v0.1 has no Bluetooth stack.
-for sym in CONFIG_BT_MRVL CONFIG_BT_MRVL_SDIO; do
-    require_absent "$sym"
-done
+# re/bt deliberately enables it with the read-only probe patch above.
+if [ "$BT_DIAG" = "1" ]; then
+    for sym in CONFIG_BT CONFIG_BT_BREDR CONFIG_BT_MRVL CONFIG_BT_MRVL_SDIO; do
+        require_symbol "$sym"
+    done
+else
+    for sym in CONFIG_BT_MRVL CONFIG_BT_MRVL_SDIO; do
+        require_absent "$sym"
+    done
+fi
 
 # cfg80211 power save lets the SD8787 sleep between beacons; on this firmware
 # it can drop unicast frames, which looks like a working DHCP lease but a dead
@@ -211,7 +232,11 @@ fdtput -t s "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /chosen bootargs \
     echo "binder ABI: 32-bit (protocol 7)"
     echo "wifi: v6 (disable_scan_offload=1, adb listener check, main-lookup rule repair, carrier-gated dhcpcd, watchdog)"
     echo "wifi ps: disabled (CONFIG_CFG80211_DEFAULT_PS is not set)"
-    echo "bt: Marvell SD8787 SDIO transport disabled (shares firmware with mwifiex)"
+    if [ "$BT_DIAG" = "1" ]; then
+        echo "bt: SD8787 read-only register probe (re/bt D1, no firmware download)"
+    else
+        echo "bt: Marvell SD8787 SDIO transport disabled (shares firmware with mwifiex)"
+    fi
     echo "initramfs bytes: $(stat -c %s "$OUT/initramfs.cpio${VERSION_SUFFIX}" 2>/dev/null || wc -c < "$OUT/initramfs.cpio${VERSION_SUFFIX}")"
     echo "zImage bytes: $(stat -c %s "$OUT/zImage${VERSION_SUFFIX}" 2>/dev/null || wc -c < "$OUT/zImage${VERSION_SUFFIX}")"
     echo

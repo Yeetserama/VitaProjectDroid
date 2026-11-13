@@ -132,10 +132,35 @@ Add a probe quirk (module parameter or kernel command line, e.g.
 - enables function 2 and reads `0x00`-`0x7f`;
 - prints the values with `dev_info` to dmesg/boot.log;
 - reads `0x60`/`0x61` a few times over 2 seconds to see whether it changes;
-- returns `-ENODEV` immediately, skipping the firmware wait.
+- returns success immediately, leaving function 2 enabled and skipping the
+  firmware wait. Returning an error or calling `sdio_disable_func()` is the
+  suspected trigger for the shared card dropping Wi-Fi.
 
 Boot with WLAN working and capture `ur0:/android/boot.log`. This gives the
 actual status value and the card revision with no risk to Wi-Fi.
+
+Implementation on the `re/bt` branch:
+
+- `scripts/patch-btmrvl-diag.py` inserts the probe-only path into
+  `drivers/bluetooth/btmrvl_sdio.c`. It enables function 2, dumps registers
+  `0x00`-`0x7f` and function-0 registers `0x00`-`0x09`, polls `0x60`/`0x61`
+  twenty times at 100 ms intervals while releasing the host around each read,
+  then leaves function 2 enabled and returns success. Keeping the probe
+  successful avoids the error path that disables the shared function.
+- `kernel/config/vita-bt-diag.fragment` re-enables `CONFIG_BT`,
+  `CONFIG_BT_BREDR`, `CONFIG_BT_MRVL` and `CONFIG_BT_MRVL_SDIO` after the
+  Android fragment turns them off.
+- `BT_DIAG=1 scripts/apply-kernel.sh ...` applies the patch and merges the
+  fragment. The probe defaults to on; `btmrvl_sdio.probe_only=0` restores the
+  normal probe.
+- The `re/bt` GitHub Actions job uploads `android-5.1.1-bt-diag`. It contains
+  only the 5.1 kernel, DTBs and initramfs. Keep the existing verified 5.1.1
+  images on ur0 and replace `ux0:/linux/zImage` with the artifact's `zImage`.
+  Building on 5.1.1 keeps the only new variable the Bluetooth probe.
+
+After boot, `dmesg` (or `ur0:/android/boot.log`) should contain `BT-DIAG:`
+register rows and the 2-second status poll. No firmware download or 100-second
+wait is attempted, so Wi-Fi must stay up.
 
 ### D2 - compare power states
 

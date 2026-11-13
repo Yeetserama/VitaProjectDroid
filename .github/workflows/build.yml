@@ -2,7 +2,7 @@ name: build
 
 on:
   push:
-    branches: [ android-6.0 ]
+    branches: [ re/bt ]
   pull_request:
   workflow_dispatch:
 
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  boot-package-6-0:
+  bt-diag-kernel:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
 
@@ -80,57 +80,44 @@ jobs:
           path: build/downloads
           key: linux-vita-a33b819fd7174f60b1d5bcb613de565b3f046687
 
-      - name: Cache Android 6.0 SDK image
-        uses: actions/cache@v4
-        with:
-          path: downloads/android-23
-          key: android-23-armeabi-v7a-23_r06
-
-      - name: Download Android 6.0 SDK images
-        run: |
-          # Pinned armeabi-v7a-23_r06.zip; the script verifies size and SHA1,
-          # then shrinks system.img with resize2fs -M and creates a 640 MiB
-          # userdata image.  No sdkmanager and no license prompts.
-          bash scripts/download-android-6.0.sh
-
-      - name: Build Android 6.0 boot package
-        # The job log is only visible to signed-in users on a public repo.
-        # Mirror the tail of the build output into an always-visible check
-        # annotation and the job summary so failures can be diagnosed from
-        # the API without credentials.
+      - name: Build SD8787 diagnostic kernel
+        # re/bt D1: probe-only register dump, no firmware download.  Build
+        # against the verified 5.1.1 userspace so the only new variable is
+        # the Bluetooth probe.  No Android images are needed; the artifact
+        # replaces only zImage on an existing 5.1.1 kit.
+        env:
+          BT_DIAG: "1"
         run: |
           set +e
-          ANDROID_VERSION=6.0 bash scripts/build.sh 2>&1 | tee build-6.0.log
+          ANDROID_VERSION=5.1 bash scripts/build.sh 2>&1 | tee build-bt-diag.log
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
             {
               echo "## Build failed (exit $status)"
               echo '```'
-              tail -n 100 build-6.0.log
+              tail -n 100 build-bt-diag.log
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
-            message=$(tail -n 60 build-6.0.log | awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }' | cut -c1-60000)
-            echo "::error title=Build boot package failed::$message"
+            message=$(tail -n 60 build-bt-diag.log | awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }' | cut -c1-60000)
+            echo "::error title=Build diagnostic kernel failed::$message"
             exit "$status"
           fi
 
       - name: Show build information
         run: |
-          cat build/out/build-info.txt-6.0
-          cat build/out/SHA256SUMS-6.0
+          cat build/out/build-info.txt
+          cat build/out/SHA256SUMS
 
-      - name: Upload Android 6.0 boot package
+      - name: Upload SD8787 diagnostic kernel
         uses: actions/upload-artifact@v4
         with:
-          name: android-6.0-boot
+          name: android-5.1.1-bt-diag
           if-no-files-found: error
           path: |
-            build/out/zImage-6.0
-            build/out/vita.dtb-6.0
-            build/out/vita1000.dtb-6.0
-            build/out/vita-selinux-disabled.dtb-6.0
-            build/out/initramfs.cpio-6.0
-            build/out/SHA256SUMS-6.0
-            build/out/build-info.txt-6.0
-            prebuilt/system-6.0.img
-            prebuilt/userdata-6.0.img
+            build/out/zImage
+            build/out/vita.dtb
+            build/out/vita1000.dtb
+            build/out/vita-selinux-disabled.dtb
+            build/out/initramfs.cpio
+            build/out/SHA256SUMS
+            build/out/build-info.txt
