@@ -7,6 +7,21 @@
 #include "psp2sgx_mk.h"
 
 #include <drm/drm_exec.h>
+#include <drm/drm_syncobj.h>
+#include <linux/sync_file.h>
+#include <linux/fdtable.h>
+
+struct psp2sgx_job {
+	struct drm_sched_job base;
+	struct psp2sgx_device *sgx;
+	struct psp2sgx_vm *vm;
+	struct drm_gem_object **bos;
+	u32 *bo_va;
+	u32 nr_bos;
+	u32 max_steps;
+	u32 code_len;
+	u64 *code;
+};
 
 static int lookup_bos(struct drm_file *file, struct psp2sgx_job *job,
 		      const struct drm_psp2sgx_submit *args,
@@ -101,6 +116,21 @@ static int build_code(struct psp2sgx_job *job, const struct drm_psp2sgx_submit *
 	return b.err;
 }
 
+static void psp2sgx_job_free(struct psp2sgx_job *job)
+{
+	u32 i;
+
+	for (i = 0; i < job->nr_bos; i++) {
+		if (job->bos[i])
+			drm_gem_object_put(job->bos[i]);
+	}
+	kvfree(job->bos);
+	kvfree(job->bo_va);
+	kvfree(job->code);
+	kvfree(job->steps);
+	kfree(job);
+}
+
 static int psp2sgx_ioctl_submit(struct drm_device *drm, void *data,
 			 struct drm_file *file)
 {
@@ -171,7 +201,7 @@ static int psp2sgx_ioctl_submit(struct drm_device *drm, void *data,
 			goto err_job;
 	}
 
-	drm_exec_init(&exec, drm, DRM_EXEC_INTERRUPTIBLE_WAIT, job->nr_bos);
+	drm_exec_init(&exec, DRM_EXEC_INTERRUPTIBLE_WAIT, job->nr_bos);
 	drm_exec_until_all_locked(&exec) {
 		err = drm_exec_prepare_array(&exec, job->bos, job->nr_bos, 1);
 		drm_exec_retry_on_contention(&exec);
@@ -229,16 +259,6 @@ err_free:
 
 static int psp2sgx_sched_init(struct psp2sgx_device *sgx)
 {
-	const struct drm_sched_init_args args = {
-		.ops = &psp2sgx_sched_ops,
-		.num_rqs = DRM_SCHED_PRIORITY_COUNT,
-		.credit_limit = 1,
-		.hang_limit = 0,
-		.timeout = msecs_to_jiffies(PSP2SGX_JOB_TIMEOUT_MS),
-		.name = "psp2sgx",
-		.dev = sgx->dev,
-	};
-
 	int err;
 
 	sgx->fence_context = dma_fence_context_alloc(1);
@@ -247,7 +267,9 @@ static int psp2sgx_sched_init(struct psp2sgx_device *sgx)
 	sgx->step_wq = alloc_ordered_workqueue("psp2sgx-steps", WQ_HIGHPRI | WQ_MEM_RECLAIM);
 	if (!sgx->step_wq)
 		return -ENOMEM;
-	err = drm_sched_init(&sgx->sched, &args);
+	err = drm_sched_init(&sgx->sched, &psp2sgx_sched_ops,
+			     DRM_SCHED_PRIORITY_COUNT, NULL, 0,
+			     msecs_to_jiffies(PSP2SGX_JOB_TIMEOUT_MS), "psp2sgx");
 	if (err)
 		destroy_workqueue(sgx->step_wq);
 	return err;
