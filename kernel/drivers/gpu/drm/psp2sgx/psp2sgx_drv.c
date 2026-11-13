@@ -123,11 +123,11 @@ static void psp2sgx_postclose(struct drm_device *drm, struct drm_file *file)
 }
 
 static const struct drm_ioctl_desc psp2sgx_ioctls[] = {
-	DRM_IOCTL_DEF_DRV(DRM_IOCTL_PSP2SGX_GET_PARAM, psp2sgx_ioctl_get_param, DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(DRM_IOCTL_PSP2SGX_BO_CREATE, psp2sgx_ioctl_bo_create, DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(DRM_IOCTL_PSP2SGX_BO_INFO, psp2sgx_ioctl_bo_info, DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(DRM_IOCTL_PSP2SGX_BO_WAIT, psp2sgx_ioctl_bo_wait, DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(DRM_IOCTL_PSP2SGX_SUBMIT, psp2sgx_ioctl_submit, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(PSP2SGX_GET_PARAM, psp2sgx_ioctl_get_param, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(PSP2SGX_BO_CREATE, psp2sgx_ioctl_bo_create, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(PSP2SGX_BO_INFO, psp2sgx_ioctl_bo_info, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(PSP2SGX_BO_WAIT, psp2sgx_ioctl_bo_wait, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(PSP2SGX_SUBMIT, psp2sgx_ioctl_submit, DRM_RENDER_ALLOW),
 };
 
 static const struct file_operations psp2sgx_fops = {
@@ -179,10 +179,10 @@ static int psp2sgx_probe(struct platform_device *pdev)
 	if (!psp2sgx_enable)
 		return -ENODEV;
 
-	sgx = devm_drm_dev_alloc(dev, &psp2sgx_driver, struct psp2sgx_device, drm);
+	sgx = devm_drm_dev_alloc(&pdev->dev, &psp2sgx_driver, struct psp2sgx_device, drm);
 	if (IS_ERR(sgx))
 		return PTR_ERR(sgx);
-	sgx->dev = dev;
+	sgx->dev = &pdev->dev;
 	mutex_init(&sgx->hw_lock);
 	spin_lock_init(&sgx->slc_lock);
 	psp2sgx_diag_init(sgx);
@@ -197,12 +197,12 @@ static int psp2sgx_probe(struct platform_device *pdev)
 
 	/* sony,power-smc = <service bus>: switch the power domain through the monitor */
 	sgx->power_smc = -1;
-	if (!of_property_read_u32_array(dev->of_node, "sony,power-smc", smc, 2)) {
+	if (!of_property_read_u32_array(pdev->dev.of_node, "sony,power-smc", smc, 2)) {
 		sgx->power_smc = smc[0];
 		sgx->power_smc_bus = smc[1];
 	}
 
-	err = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(32));
+	err = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32));
 	if (err)
 		return err;
 
@@ -214,7 +214,7 @@ static int psp2sgx_probe(struct platform_device *pdev)
 	err = psp2sgx_hw_power_on(sgx);
 	if (err)
 		return err;
-	dev_info(dev, "SGX core id %#x, revision %#x\n", sgx->core_id,
+	dev_info(&pdev->dev, "SGX core id %#x, revision %#x\n", sgx->core_id,
 		 sgx->core_revision);
 
 	err = psp2sgx_kregion_init(sgx);
@@ -231,9 +231,9 @@ static int psp2sgx_probe(struct platform_device *pdev)
 	if (err)
 		goto err_kregion;
 
-	err = devm_request_threaded_irq(dev, sgx->irq, psp2sgx_irq,
+	err = devm_request_threaded_irq(&pdev->dev, sgx->irq, psp2sgx_irq,
 					psp2sgx_irq_thread, IRQF_SHARED,
-					dev_name(dev), sgx);
+					dev_name(&pdev->dev), sgx);
 	if (err)
 		goto err_sched;
 
