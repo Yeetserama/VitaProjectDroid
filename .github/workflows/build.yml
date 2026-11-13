@@ -2,7 +2,7 @@ name: build
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ android-6.0 ]
   pull_request:
   workflow_dispatch:
 
@@ -10,9 +10,9 @@ permissions:
   contents: read
 
 jobs:
-  boot-package:
+  boot-package-6-0:
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: 90
 
     steps:
       - name: Check out
@@ -39,7 +39,7 @@ jobs:
       - name: Install build dependencies
         timeout-minutes: 20
         # A single apt run aborts the job when the resolver fails mid-flight,
-        # so retry the update/install pair with bounded timeouts.
+        # so retry a few times with a short backoff.
         run: |
           apt_opts=(
             -o Acquire::ForceIPv4=true
@@ -52,11 +52,13 @@ jobs:
             bison
             ca-certificates
             device-tree-compiler
+            e2fsprogs
             flex
             gcc-arm-linux-gnueabihf
             libelf-dev
             libssl-dev
             python3
+            unzip
             xz-utils
           )
           for attempt in 1 2 3; do
@@ -78,42 +80,57 @@ jobs:
           path: build/downloads
           key: linux-vita-a33b819fd7174f60b1d5bcb613de565b3f046687
 
-      - name: Build boot package
+      - name: Cache Android 6.0 SDK image
+        uses: actions/cache@v4
+        with:
+          path: downloads/android-23
+          key: android-23-armeabi-v7a-23_r06
+
+      - name: Download Android 6.0 SDK images
+        run: |
+          # Pinned armeabi-v7a-23_r06.zip; the script verifies size and SHA1,
+          # then shrinks system.img with resize2fs -M and creates a 640 MiB
+          # userdata image.  No sdkmanager and no license prompts.
+          bash scripts/download-android-6.0.sh
+
+      - name: Build Android 6.0 boot package
         # The job log is only visible to signed-in users on a public repo.
         # Mirror the tail of the build output into an always-visible check
         # annotation and the job summary so failures can be diagnosed from
         # the API without credentials.
         run: |
           set +e
-          bash scripts/build.sh 2>&1 | tee build.log
+          ANDROID_VERSION=6.0 bash scripts/build.sh 2>&1 | tee build-6.0.log
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
             {
               echo "## Build failed (exit $status)"
               echo '```'
-              tail -n 100 build.log
+              tail -n 100 build-6.0.log
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
-            message=$(tail -n 60 build.log | awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }' | cut -c1-60000)
+            message=$(tail -n 60 build-6.0.log | awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }' | cut -c1-60000)
             echo "::error title=Build boot package failed::$message"
             exit "$status"
           fi
 
       - name: Show build information
         run: |
-          cat build/out/build-info.txt
-          cat build/out/SHA256SUMS
+          cat build/out/build-info.txt-6.0
+          cat build/out/SHA256SUMS-6.0
 
-      - name: Upload boot package
+      - name: Upload Android 6.0 boot package
         uses: actions/upload-artifact@v4
         with:
-          name: android-on-vita-boot
+          name: android-6.0-boot
           if-no-files-found: error
           path: |
-            build/out/zImage
-            build/out/vita.dtb
-            build/out/vita1000.dtb
-            build/out/vita-selinux-disabled.dtb
-            build/out/initramfs.cpio
-            build/out/SHA256SUMS
-            build/out/build-info.txt
+            build/out/zImage-6.0
+            build/out/vita.dtb-6.0
+            build/out/vita1000.dtb-6.0
+            build/out/vita-selinux-disabled.dtb-6.0
+            build/out/initramfs.cpio-6.0
+            build/out/SHA256SUMS-6.0
+            build/out/build-info.txt-6.0
+            prebuilt/system-6.0.img
+            prebuilt/userdata-6.0.img

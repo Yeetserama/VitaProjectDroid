@@ -8,9 +8,12 @@ Bring-up uses the prebuilt SDK image
 `system-images;android-22;default;armeabi-v7a` (build LMY48X), not an AOSP
 build. **Fallback if 5.1 is too slow: Android 4.4.4 (KitKat, API 19).**
 
-Do not target Android 6.0 or newer. The Vita has 512 MB of RAM, a 32-bit ARMv7
-CPU, no GPU driver, and no modern HAL stack. The version number is not what
-limits us; the hardware and the missing graphics driver are.
+Do not expect Android 6.0 or newer to replace 5.1.1 as the primary target. The
+Vita has 512 MB of RAM, a 32-bit ARMv7 CPU, no GPU driver, and no modern HAL
+stack. Android 6.0 is now an experimental branch using the official API 23
+`armeabi-v7a` SDK image; it is useful for extending app compatibility, but it
+has a higher memory floor than 5.1.1 and is not a daily-driver candidate yet.
+Android 7.1 and 8+ are not practical with official SDK images.
 
 ## 2. Version comparison
 
@@ -18,7 +21,7 @@ limits us; the hardware and the missing graphics driver are.
 | --- | --- | --- | --- | --- | --- |
 | 4.4.4 | 19 | Designed for 512 MB ("Project Svelte") | binder + ashmem + logger + lowmemorykiller | software GLES 2.0 | Best performance, oldest apps; fallback |
 | 5.1.1 | 22 | 512 MB minimum on paper, 1 GB realistic | binder + ashmem | software GLES 2.0 | **Recommended**: newest practical |
-| 6.0 | 23 | 1 GB realistic | binder + ashmem | software GLES | Too heavy |
+| 6.0 | 23 | 1 GB realistic | binder + ashmem | software GLES | Experimental branch; API 23 still has `armeabi-v7a` |
 | 7.1.2 | 25 | 1 GB+ | binder + ashmem | software GLES | Too heavy |
 | 8.1 Go | 27 | 1 GB, Treble/HIDL | binder + ashmem, HIDL | software GLES | Not realistic |
 | 9+ | 28+ | 2 GB+ | Treble, APEX, etc. | software | No |
@@ -33,8 +36,15 @@ Notes:
   work.
 - Android 5.1 is the last version that is realistically viable on 512 MB and
   still has a large base of period-correct APKs.
-- Android 6/7 would boot but leave too little RAM for apps. Android 8+ adds
-  Treble/HIDL and expects 1 GB+; it is not a sensible target for this port.
+- Android 6.0 boots far enough to be useful only with the same low-RAM tuning
+  and the ur0 swap. Its framework and ART are heavier, so treat it as an
+  experiment for apps that require API 23. See
+  [android-6.0.md](android-6.0.md).
+- Android 7.0 (API 24) is the last official SDK with `armeabi-v7a`; API 25+ ship
+  only `arm64-v8a`, which the Cortex-A9 cannot run. A 7.1+ port would need a
+  custom 32-bit AOSP build, not an SDK image.
+- Android 8+ adds Treble/HIDL and expects 1 GB+; it is not a sensible target
+  for this port.
 
 ## 3. Why not a modern Android?
 
@@ -79,6 +89,17 @@ The system image is mounted read-only from `/dev/loop0`; `userdata.img` is
 mounted read-write from `/dev/loop1`; `/cache` is a 64 MB tmpfs. The unmodified
 sizes fit ur0 with about 1.2 GB left. See
 [ur0-storage-plan.md](ur0-storage-plan.md).
+
+### Android 6.0 image (experimental)
+
+The `android-6.0` branch uses
+`system-images;android-23;default;armeabi-v7a`. The SDK system image is 1.5 GiB
+but only about 500 MB is used, so the download script shrinks it with
+`resize2fs -M` and rejects anything above 900 MiB. A fresh 640 MiB userdata
+image is created, and the same 512 MiB ur0 swap is used. The build selects
+`ramdisk-6.0.img` and `initramfs-overlay-6.0/`, but the kernel, binder ABI, and
+fragment are identical to 5.1.1. The Android 6.0 port boots headless first;
+see [android-6.0.md](android-6.0.md).
 
 The generic image is not tuned for the Vita. Expect:
 
@@ -357,5 +378,7 @@ Do not add the `vita` device until a generic `aosp_arm-eng` build works.
 ## 7. Decision
 
 Lock the first target to **Android 5.1.1, prebuilt SDK image, API 22**. Keep
-Android 4.4.4 as a documented fallback, not a parallel target. Supporting two
-Android versions at once would double the HAL work and delay the first boot.
+Android 4.4.4 as a documented fallback, not a parallel target. Keep Android 6.0
+on its own branch as an API 23 compatibility experiment; it shares the kernel
+and boot design, so it does not add HAL work, but it is not the primary UI
+target. Do not attempt 7.1+ with official SDK images.

@@ -21,6 +21,13 @@ Wi-Fi stay up. The boot now also enables a 512 MiB `ur0:/android/swap.img`
 alongside 128 MiB of zram, which gives the kernel about 1 GiB of anonymous
 memory to work with; it does not make disk swap fast.
 
+**Version branches:** 5.1.1 stays on `feat/ui-software-renderer` and remains
+the primary target. `android-4.2.2`, `android-gingerbread`, and `android-6.0`
+carry the other ports. Only one version's `system.img`/`userdata.img` can be
+installed on ur0 at a time. Android 6.0 is an experimental headless bring-up
+that reuses the 5.1 kernel; see
+[docs/android-6.0.md](docs/android-6.0.md).
+
 Target:
 **Android 5.1.1 (API 22) on a PCH-1000 (OLED)**, using the LinuxOnVita 6.12
 kernel, with **no SD2Vita adapter**. Firmware is **3.65 with HENkaku + Enso**;
@@ -71,6 +78,7 @@ can appear.
 | Boot files | `ux0:/linux/zImage` + `vita.dtb`, read by the VitaOS-side loader from the official Sony card |
 | Android images | `ur0:/android/system.img` (750 MB, ext4, read-only) and `userdata.img` (550 MB, ext4, writable) |
 | `/cache` | 64 MB tmpfs from `fstab.vita`; no cache image on ur0 |
+| Swap | 128 MiB zram plus a 512 MiB `ur0:/android/swap.img` on loop2 (5.1.1 and later) |
 | Stage-1 init | Static busybox `sh` as `/init.vita` (`rdinit=/init.vita`), then `exec /init` |
 | Headless first | zygote, SurfaceFlinger, media, drm, and RIL stay stopped; `adbd` runs on TCP port 5555 |
 | UI | Optional: `adb shell setprop vita.ui 1`, or create `ur0:/android/ui` before boot |
@@ -91,6 +99,7 @@ VitaOS + Enso
                  -> mounts devtmpfs/proc/sys and ur0 read-write
                  -> losetup /dev/loop0 system.img, /dev/loop1 userdata.img
                  -> enables 128 MiB zram swap
+                 -> enables ur0:/android/swap.img on /dev/loop2
                  -> exec /init (Android 5.1.1 init)
                     -> imports /init.vita.rc
                     -> mount_all /fstab.vita
@@ -175,6 +184,20 @@ The repository CI workflow runs the same command and uploads those files as the
 `android-on-vita-boot` artifact. A local build is also possible on Linux, WSL2,
 or Docker.
 
+Android 6.0 is built from its own branch. The SDK download also prepares and
+shrinks the two ext4 images, so it needs `e2fsprogs` and free disk space for the
+238 MB zip and the 1.5 GB system image:
+
+```sh
+bash scripts/download-android-6.0.sh
+ANDROID_VERSION=6.0 bash scripts/build.sh
+```
+
+That produces the same files with a `-6.0` suffix plus
+`prebuilt/system-6.0.img` and `prebuilt/userdata-6.0.img`. See
+[docs/android-6.0.md](docs/android-6.0.md) for the install and first-boot
+checklist.
+
 ## Install and first boot
 
 1. Back up the current `ux0:/linux/` directory. Keep LinuxOnVita's working
@@ -215,6 +238,8 @@ the console; hold **L** during power-on if a taiHEN plugin misbehaves.
   works, what does not, and the honest verdict.
 - [docs/android-version.md](docs/android-version.md) - version comparison, the
   prebuilt-image decision, and low-RAM tuning.
+- [docs/android-6.0.md](docs/android-6.0.md) - the experimental Android 6.0
+  branch: API 23 image preparation, headless bring-up, and known limits.
 - [docs/drivers-and-firmware.md](docs/drivers-and-firmware.md) - why Vita
   firmware cannot be reused, what drivers exist, and the firmware blobs Android
   actually needs.

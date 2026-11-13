@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Assemble the Android 5.1.1 initramfs for the Vita.
+# Assemble the Android initramfs for the Vita.
 #
 # Inputs:
 #   prebuilt/ramdisk.img        stock Android 5.1.1 ARM ramdisk (gzip cpio)
+#   prebuilt/ramdisk-6.0.img    stock Android 6.0 ARM ramdisk (gzip cpio)
 #   prebuilt/busybox-armv7l     static ARM busybox used by /init.vita
-#   initramfs-overlay/          Vita-specific init, fstab, input files
+#   initramfs-overlay/          Vita-specific init, fstab, input files (5.1)
+#   initramfs-overlay-6.0/      Vita-specific init, fstab, input files (6.0)
 #   vendor/vita-linux/          glibc wpa_supplicant + firmware
 #
 # Output:
@@ -12,20 +14,38 @@
 #   embeds it directly (CONFIG_INITRAMFS_SOURCE=...cpio).
 #
 # Usage:
-#   scripts/build-initramfs.sh [OUTPUT.cpio] [STAGING_DIR]
+#   scripts/build-initramfs.sh [OUTPUT.cpio] [STAGING_DIR] [ANDROID_VERSION]
+#   ANDROID_VERSION: 5.1 or 6.0 (default 5.1)
 
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 OUT=${1:-"$ROOT/build/initramfs.cpio"}
 STAGE=${2:-"$ROOT/build/initramfs-root"}
+ANDROID_VERSION=${3:-"5.1"}
 
-RAMDISK="$ROOT/prebuilt/ramdisk.img"
+echo "build-initramfs.sh: ANDROID_VERSION=$ANDROID_VERSION"
+
+case "$ANDROID_VERSION" in
+    5.1)
+        RAMDISK="$ROOT/prebuilt/ramdisk.img"
+        OVERLAY="$ROOT/initramfs-overlay"
+        RAMDISK_SHA256="293F60C1DC08ADFCDFBF2FE4C37F73AB4B75C5A84A9CC25F15001878630715DD"
+        ;;
+    6.0)
+        RAMDISK="$ROOT/prebuilt/ramdisk-6.0.img"
+        OVERLAY="$ROOT/initramfs-overlay-6.0"
+        RAMDISK_SHA256="713225AFABEE109C75493F8D793945768303DED45E6F9021D839C673A26475A8"
+        ;;
+    *)
+        echo "build-initramfs: unknown Android version: $ANDROID_VERSION" >&2
+        exit 1
+        ;;
+esac
+
 BUSYBOX="$ROOT/prebuilt/busybox-armv7l"
-OVERLAY="$ROOT/initramfs-overlay"
 VENDOR="$ROOT/vendor/vita-linux"
 
-RAMDISK_SHA256="293F60C1DC08ADFCDFBF2FE4C37F73AB4B75C5A84A9CC25F15001878630715DD"
 BUSYBOX_SHA256="CD04052B8B6885F75F50B2A280BFCBF849D8710C8E61D369C533ACF307EDA064"
 
 die() {
@@ -58,7 +78,7 @@ command -v python3 >/dev/null 2>&1 || die "python3 is required"
 check_sha256 "$RAMDISK" "$RAMDISK_SHA256"
 check_sha256 "$BUSYBOX" "$BUSYBOX_SHA256"
 
-echo "==> unpacking Android ramdisk"
+echo "==> unpacking Android ${ANDROID_VERSION} ramdisk"
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
 python3 "$ROOT/scripts/unpack_cpio.py" "$RAMDISK" "$STAGE"
@@ -76,7 +96,7 @@ rm -f \
 [ -x "$STAGE/init" ] || die "Android init missing from ramdisk"
 [ -x "$STAGE/sbin/adbd" ] || die "adbd missing from ramdisk"
 
-echo "==> adding Vita overlay"
+echo "==> adding Vita overlay for Android ${ANDROID_VERSION}"
 cp -a "$OVERLAY/." "$STAGE/"
 
 # A Git checkout on Windows does not preserve execute bits.  Restore them here

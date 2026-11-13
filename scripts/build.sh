@@ -12,11 +12,14 @@
 # (arm-linux-gnueabihf-gcc).
 #
 # Usage:
-#   scripts/build.sh
+#   scripts/build.sh [ANDROID_VERSION]
+#   ANDROID_VERSION=6.0 scripts/build.sh
 #   KERNEL_SRC=/path/to/linux_vita scripts/build.sh
 #   CLEAN=1 scripts/build.sh
 #
-# Artifacts:
+# ANDROID_VERSION is 5.1 (default) or 6.0.
+#
+# Artifacts (5.1):
 #   build/out/zImage
 #   build/out/vita.dtb                     (permissive SELinux bootargs)
 #   build/out/vita-selinux-disabled.dtb    (fallback)
@@ -24,6 +27,15 @@
 #   build/out/initramfs.cpio
 #   build/out/SHA256SUMS
 #   build/out/build-info.txt
+#
+# Artifacts (6.0) use the -6.0 suffix:
+#   build/out/zImage-6.0
+#   build/out/vita.dtb-6.0
+#   build/out/vita-selinux-disabled.dtb-6.0
+#   build/out/vita1000.dtb-6.0
+#   build/out/initramfs.cpio-6.0
+#   build/out/SHA256SUMS-6.0
+#   build/out/build-info.txt-6.0
 
 set -euo pipefail
 
@@ -32,9 +44,29 @@ BUILD_DIR=${BUILD_DIR:-"$ROOT/build"}
 KERNEL_REF="a33b819fd7174f60b1d5bcb613de565b3f046687"
 KERNEL_URL="https://github.com/incognitojam/linux_vita/archive/${KERNEL_REF}.tar.gz"
 KERNEL_SRC=${KERNEL_SRC:-"$BUILD_DIR/linux_vita"}
-INITRAMFS="$BUILD_DIR/initramfs.cpio"
-STAGE="$BUILD_DIR/initramfs-root"
-OUT="$BUILD_DIR/out"
+# Priority: environment variable > argument > default.
+ANDROID_VERSION=${ANDROID_VERSION:-${1:-"5.1"}}
+
+echo "build.sh: ANDROID_VERSION=$ANDROID_VERSION"
+echo "build.sh: ROOT=$ROOT"
+echo "build.sh: BUILD_DIR=$BUILD_DIR"
+
+case "$ANDROID_VERSION" in
+    5.1)
+        INITRAMFS="$BUILD_DIR/initramfs.cpio"
+        STAGE="$BUILD_DIR/initramfs-root"
+        OUT="$BUILD_DIR/out"
+        ;;
+    6.0)
+        INITRAMFS="$BUILD_DIR/initramfs.cpio-6.0"
+        STAGE="$BUILD_DIR/initramfs-root-6.0"
+        OUT="$BUILD_DIR/out"
+        ;;
+    *)
+        echo "build: unknown Android version: $ANDROID_VERSION" >&2
+        exit 1
+        ;;
+esac
 
 die() {
     echo "build: $*" >&2
@@ -93,11 +125,11 @@ fi
 
 # Invoke through bash explicitly: a Windows Git checkout stores 100644 modes,
 # and relying on the kernel shebang would fail there.
-echo "==> building initramfs"
-bash "$ROOT/scripts/build-initramfs.sh" "$INITRAMFS" "$STAGE"
+echo "==> building initramfs for Android ${ANDROID_VERSION}"
+bash "$ROOT/scripts/build-initramfs.sh" "$INITRAMFS" "$STAGE" "$ANDROID_VERSION"
 
-echo "==> building kernel"
-bash "$ROOT/scripts/apply-kernel.sh" "$KERNEL_SRC" "$INITRAMFS" "$OUT"
+echo "==> building kernel for Android ${ANDROID_VERSION}"
+bash "$ROOT/scripts/apply-kernel.sh" "$KERNEL_SRC" "$INITRAMFS" "$OUT" "$ANDROID_VERSION"
 
 echo
-echo "boot package ready in $OUT"
+echo "boot package for Android ${ANDROID_VERSION} ready in $OUT"

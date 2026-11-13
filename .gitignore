@@ -5,6 +5,12 @@ build/
 *.cpio
 *.part
 
+# Downloaded Android SDK images (large; fetched by scripts/download-android-*.sh)
+downloads/
+prebuilt/ramdisk-6.0.img
+prebuilt/system-6.0.img
+prebuilt/userdata-6.0.img
+
 # Reverse-engineering workspace: never commit dumps or Ghidra projects
 re/dumps/
 re/ghidra/
