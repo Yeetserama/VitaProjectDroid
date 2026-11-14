@@ -225,13 +225,13 @@ fi
 # Install Mesa psp2sgx gallium driver libraries into /system/lib.
 # The libraries live in the initramfs (built by CI from Mesa source) and
 # need to be copied to /system/lib so libEGL can load the hardware driver.
-if [ -e /libpsp2sgx.a ]; then
+if [ -e /lib/libpsp2sgx.a ]; then
     log "Installing Mesa psp2sgx driver libraries"
     mount -o remount,rw /system 2>/dev/null
     mkdir -p /system/lib 2>/dev/null
     mkdir -p /system/lib/hw/egl 2>/dev/null
-    cp /libpsp2sgx.a /system/lib/ 2>/dev/null
-    cp /libEGL_psp2sgx.so /system/lib/hw/egl/ 2>/dev/null
+    cp /lib/libpsp2sgx.a /system/lib/libpsp2sgx.a 2>/dev/null
+    cp /lib/libEGL_psp2sgx.so /system/lib/hw/egl/libEGL_psp2sgx.so 2>/dev/null
     mount -o remount,ro /system 2>/dev/null
     log "Mesa psp2sgx driver libraries installed"
 fi
