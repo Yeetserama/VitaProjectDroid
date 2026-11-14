@@ -254,13 +254,13 @@ fi
 # TODO: determine the correct GPU IRQ and add an "interrupts" property here.
 # Without it, platform_get_irq() returns -EINVAL and the driver will not probe.
 if [ "$ANDROID_VERSION" = "4.2" ] || [ "$ANDROID_VERSION" = "4.2.2" ]; then
-    fdtput -p -t s "$OUT/vita.dtb${VERSION_SUFFIX}" /soc/gpu compatible "sony,vita-gpu"
-    fdtput -p -t u32 "$OUT/vita.dtb${VERSION_SUFFIX}" /soc/gpu reg 0xe8400000 0x20000
-    fdtput -p -t s "$OUT/vita.dtb${VERSION_SUFFIX}" /soc/gpu status "okay"
+    fdtput -c -t s "$OUT/vita.dtb${VERSION_SUFFIX}" /soc/gpu compatible "sony,vita-gpu"
+    fdtput -t u32 "$OUT/vita.dtb${VERSION_SUFFIX}" /soc/gpu reg 0xe8400000 0x20000
+    fdtput -t s "$OUT/vita.dtb${VERSION_SUFFIX}" /soc/gpu status "okay"
     if [ "$ANDROID_VERSION" != "2.2" ]; then
-        fdtput -p -t s "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc/gpu compatible "sony,vita-gpu"
-        fdtput -p -t u32 "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc/gpu reg 0xe8400000 0x20000
-        fdtput -p -t s "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc/gpu status "okay"
+        fdtput -c -t s "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc/gpu compatible "sony,vita-gpu"
+        fdtput -t u32 "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc/gpu reg 0xe8400000 0x20000
+        fdtput -t s "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc/gpu status "okay"
     fi
 fi
 
