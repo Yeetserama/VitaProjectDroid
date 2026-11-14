@@ -193,8 +193,10 @@ CONFIG_LOCALVERSION="-vita-android-4.2"
 
 # ---------------------------------------------------------------------------
 # GPU Research: Vita SGX543MP4+ Read-Only Probe (G2 gate)
+# Disabled: psp2sgx now owns the GPU.  The old late_initcall would power the
+# GPU back off after psp2sgx had bound.
 # ---------------------------------------------------------------------------
-CONFIG_VITA_GPU_PROBE=y
+# CONFIG_VITA_GPU_PROBE is not set
 
 # ---------------------------------------------------------------------------
 # GPU: psp2sgx DRM driver for the PowerVR SGX543MP4+ (G4)

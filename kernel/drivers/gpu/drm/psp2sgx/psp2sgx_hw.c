@@ -10,6 +10,7 @@
 #include <linux/delay.h>
 #include <linux/iopoll.h>
 #include <linux/moduleparam.h>
+#include <linux/sizes.h>
 
 #include "psp2sgx_drv.h"
 #include "psp2sgx_mk.h"
@@ -26,8 +27,14 @@ MODULE_PARM_DESC(cores, "Number of SGX cores to use (1-4)");
  * with SMC 0x110 (bus 0 = GPU, 1 = start, 0 = stop), and the monitor then
  * programs the Pervasive reset and gate registers.  Whether the monitor is
  * still resident depends on how Linux was started, so the device tree says
- * whether to call it (sony,power-smc).
+ * whether to call it (sony,power-smc).  Without the monitor, the same two
+ * Pervasive registers can be driven directly; the G2 probe did that and
+ * read the SGX core ID afterwards.
  */
+#define PERVASIVE_RESET_BASE	0xe3101000
+#define PERVASIVE_GATE_BASE	0xe3102000
+#define PERVASIVE_GPU_OFFSET	0x10
+
 static u32 psp2sgx_smc_bus(u32 service, u32 bus, u32 command)
 {
 	register u32 r0 asm("r0") = bus;
@@ -85,15 +92,58 @@ int psp2sgx_hw_build_kregion(struct psp2sgx_device *sgx)
 	return 0;
 }
 
+static int psp2sgx_perv_map(struct psp2sgx_device *sgx)
+{
+	if (!sgx->perv_reset) {
+		sgx->perv_reset = devm_ioremap(sgx->dev, PERVASIVE_RESET_BASE,
+					       SZ_4K);
+		if (!sgx->perv_reset)
+			return -ENOMEM;
+	}
+	if (!sgx->perv_gate) {
+		sgx->perv_gate = devm_ioremap(sgx->dev, PERVASIVE_GATE_BASE,
+					      SZ_4K);
+		if (!sgx->perv_gate)
+			return -ENOMEM;
+	}
+	return 0;
+}
+
 int psp2sgx_hw_power_on(struct psp2sgx_device *sgx)
 {
+	int err;
+
 	if (sgx->power_smc >= 0) {
 		u32 ret = psp2sgx_smc_bus(sgx->power_smc, sgx->power_smc_bus, 1);
 
 		if (ret)
 			dev_warn(sgx->dev, "power SMC returned %#x\n", ret);
 		usleep_range(1000, 2000);
+	} else {
+		u32 reset, gate;
+
+		err = psp2sgx_perv_map(sgx);
+		if (err)
+			return err;
+
+		reset = readl(sgx->perv_reset + PERVASIVE_GPU_OFFSET);
+		gate = readl(sgx->perv_gate + PERVASIVE_GPU_OFFSET);
+		dev_info(sgx->dev, "pervasive GPU reset %#x gate %#x before power-on\n",
+			 reset, gate);
+
+		/* the G2 probe's sequence: deassert reset, then enable the clock */
+		writel(0, sgx->perv_reset + PERVASIVE_GPU_OFFSET);
+		writel(1, sgx->perv_gate + PERVASIVE_GPU_OFFSET);
+		wmb();
+		udelay(100);
+		msleep(10);
+
+		reset = readl(sgx->perv_reset + PERVASIVE_GPU_OFFSET);
+		gate = readl(sgx->perv_gate + PERVASIVE_GPU_OFFSET);
+		dev_info(sgx->dev, "pervasive GPU reset %#x gate %#x after power-on\n",
+			 reset, gate);
 	}
+
 	psp2sgx_start(sgx);
 	sgx->core_id = sgx_read(sgx, SGX_CORE_ID);
 	sgx->core_revision = sgx_read(sgx, SGX_CORE_REVISION);
@@ -104,8 +154,13 @@ void psp2sgx_hw_power_off(struct psp2sgx_device *sgx)
 {
 	sgx_write(sgx, SGX_EVENT_HOST_ENABLE, 0);
 	sgx_write(sgx, SGX_EVENT_HOST_ENABLE2, 0);
-	if (sgx->power_smc >= 0)
+	if (sgx->power_smc >= 0) {
 		psp2sgx_smc_bus(sgx->power_smc, sgx->power_smc_bus, 0);
+	} else if (sgx->perv_reset && sgx->perv_gate) {
+		writel(1, sgx->perv_reset + PERVASIVE_GPU_OFFSET);
+		writel(0, sgx->perv_gate + PERVASIVE_GPU_OFFSET);
+		wmb();
+	}
 }
 
 static int poll_bits(struct psp2sgx_device *sgx, u32 reg, u32 bits, u32 *seen)
