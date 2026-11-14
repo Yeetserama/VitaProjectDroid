@@ -1,0 +1,23 @@
+# Mesa gallium driver for PlayStation Vita SGX543MP4+
+# ARM cross-compilation Makefile
+
+CC = arm-linux-gnueabihf-gcc
+AR = arm-linux-gnueabihf-ar
+CFLAGS = -O2 -Wall -Wextra -I. -I/usr/include -I/usr/include/drm
+
+SRCS = psp2sgx_gallium.c psp2sgx_driver.c
+OBJS = $(SRCS:.c=.o)
+TARGET = libpsp2sgx.a
+
+all: $(TARGET)
+
+%.o: %.c psp2sgx_gallium.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(TARGET): $(OBJS)
+	$(AR) rcs $@ $(OBJS)
+
+clean:
+	rm -f *.o $(TARGET)
+
+.PHONY: all clean
