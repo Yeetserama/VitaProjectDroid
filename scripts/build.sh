@@ -144,7 +144,7 @@ fi
 # Invoke through bash explicitly: a Windows Git checkout stores 100644 modes,
 # and relying on the kernel shebang would fail there.
 echo "==> building initramfs for Android ${ANDROID_VERSION}"
-bash "$ROOT/scripts/build-initramfs.sh" "$INITRAMFS" "$STAGE" "$ANDROID_VERSION"
+bash "$ROOT/scripts/build-initramfs.sh" "$INITRAMFS" "$STAGE" "$ANDROID_VERSION" "${MESA_LIBS_DIR:-}"
 
 echo "==> building kernel for Android ${ANDROID_VERSION}"
 bash "$ROOT/scripts/apply-kernel.sh" "$KERNEL_SRC" "$INITRAMFS" "$OUT" "$ANDROID_VERSION"

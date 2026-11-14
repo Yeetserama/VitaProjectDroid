@@ -22,10 +22,12 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 OUT=${1:-"$ROOT/build/initramfs.cpio"}
 STAGE=${2:-"$ROOT/build/initramfs-root"}
 ANDROID_VERSION=${3:-"5.1"}
+MESA_LIBS_DIR=${4:-""}
 
 echo "build-initramfs.sh: ANDROID_VERSION=$ANDROID_VERSION"
 echo "build-initramfs.sh: OUT=$OUT"
 echo "build-initramfs.sh: STAGE=$STAGE"
+echo "build-initramfs.sh: MESA_LIBS_DIR=$MESA_LIBS_DIR"
 
 case "$ANDROID_VERSION" in
     5.1)
