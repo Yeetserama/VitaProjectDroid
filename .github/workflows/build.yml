@@ -195,7 +195,7 @@ jobs:
 
       - name: Build Mesa psp2sgx gallium driver (ARM)
         run: |
-          set +e
+          set -e
           cd mesa/drivers/psp2sgx
           arm-linux-gnueabihf-gcc -O2 -Wall -Wextra -I. -Istub_headers -Iegl_hal -I/usr/include -I/usr/include/drm -c egl_hal/egl_hal.c -o egl_hal/egl_hal.o
           arm-linux-gnueabihf-gcc -O2 -Wall -Wextra -I. -Istub_headers -Iegl_hal -I/usr/include -I/usr/include/drm -c psp2sgx_gallium.c -o psp2sgx_gallium.o
