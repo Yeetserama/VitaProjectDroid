@@ -46,6 +46,16 @@ int sgx_mk_build(u64 *code, u32 cap, u32 *len, u32 kregion_va)
 	sgx_usse_limm(a, SGX_USSE_ALWAYS, HC_R, kregion_va + SGX_MK_HOSTCTL);
 
 	/*
+	 * Patch the kicker word address so the microkernel can poll on it
+	 */
+	sgx_usse_limm(a, SGX_USSE_ALWAYS, R(17), kregion_va + SGX_MK_KICKER);
+
+	/*
+	 * Patch the event PDS program address
+	 */
+	sgx_usse_limm(a, SGX_USSE_ALWAYS, R(18), kregion_va + SGX_MK_EVENT_PDS);
+
+	/*
 	 * Claim the posted run: the host's post differs from the last one
 	 * taken.  Other events can start the event program too, so two
 	 * microkernel threads may run at once; the mutex makes the check and
