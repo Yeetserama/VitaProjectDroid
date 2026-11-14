@@ -192,16 +192,6 @@ jobs:
           # No sdkmanager, no license prompts, no network dependency beyond
           # dl.google.com.
           bash scripts/download-android-4.2.sh
-
-      - name: Build Mesa psp2sgx gallium driver (ARM)
-        run: |
-          set -e
-          cd mesa/drivers/psp2sgx
-          arm-linux-gnueabihf-gcc -O2 -Wall -Wextra -I. -Istub_headers -I/usr/include -I/usr/include/drm -c psp2sgx_gallium.c -o psp2sgx_gallium.o
-          arm-linux-gnueabihf-gcc -O2 -Wall -Wextra -I. -Istub_headers -I/usr/include -I/usr/include/drm -c psp2sgx_driver.c -o psp2sgx_driver.o
-          arm-linux-gnueabihf-ar rcs libpsp2sgx.a psp2sgx_gallium.o psp2sgx_driver.o
-          echo "Mesa psp2sgx driver built successfully"
-          ls -la libpsp2sgx.a
       - name: Build Android 4.2.2 boot package
         env:
           MESA_LIBS_DIR: ${{ github.workspace }}/mesa/drivers/psp2sgx
