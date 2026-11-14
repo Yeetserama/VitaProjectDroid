@@ -24,17 +24,6 @@ void psp2sgx_fini(void)
 	psp2sgx_driver_inited = 0;
 }
 
-/* Standard library constructor/destructor */
-void _init(void)
-{
-	psp2sgx_init();
-}
-
-void _fini(void)
-{
-	psp2sgx_fini();
-}
-
 /* Get driver parameters */
 int psp2sgx_get_param(int param, int *value)
 {
