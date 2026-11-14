@@ -100,16 +100,35 @@ unsigned int psp2sgx_hw_cores(void)
 	return cores;
 }
 
+static int psp2sgx_hw_build_event_pds(struct psp2sgx_device *sgx);
+
 int psp2sgx_hw_build_kregion(struct psp2sgx_device *sgx)
 {
 	u32 len = 0;
 	int err;
 
-	err = sgx_mk_build((u64 *)sgx->kregion, sgx->kregion_size / sizeof(u64), &len,
-			   SGX_KREGION_VA);
+	err = sgx_mk_build((u64 *)((u8 *)sgx->kregion + SGX_MK_CODE),
+			   (sgx->kregion_size - SGX_MK_CODE) / sizeof(u64),
+			   &len, SGX_KREGION_VA);
 	if (err)
 		return err;
 	dev_info(sgx->dev, "microkernel: %u instructions\n", len);
+	err = psp2sgx_hw_build_event_pds(sgx);
+	if (err)
+		return err;
+	return 0;
+}
+
+/* The event PDS program the kick runs: it starts one microkernel task at
+ * code base SGX_MK_CODE_BASE, instruction index 0.  pa2 (the kick word) is
+ * zero for now; the microkernel reads hostctl from its own address. */
+static int psp2sgx_hw_build_event_pds(struct psp2sgx_device *sgx)
+{
+	u32 *prog = (u32 *)((u8 *)sgx->kregion + SGX_MK_EVENT_PDS);
+	u32 doutu0 = sgx_pds_doutu0(SGX_MK_CODE_BASE, 0, 8);
+
+	sgx_pds_event_program(prog, 0, doutu0);
+	wmb();
 	return 0;
 }
 
@@ -498,9 +517,17 @@ void psp2sgx_hw_set_vm(struct psp2sgx_device *sgx, struct psp2sgx_vm *vm)
 	wmb();
 }
 
-/* Core 0's event kick: runs the event PDS program, which starts the microkernel. */
+/* Core 0's event kick: increment the kicker word and run the event PDS
+ * program, which starts the microkernel.  The kicker word lives in the
+ * kernel region, so flush the SLC before the kick so the GPU sees it. */
 void psp2sgx_hw_kick(struct psp2sgx_device *sgx)
 {
+	u32 *kicker = (u32 *)((u8 *)sgx->kregion + SGX_MK_KICKER);
+
+	wmb();
+	/* Sony: increment the event kicker word before each kick. */
+	*kicker = (*kicker + 1) & 0xff;
+	psp2sgx_hw_slc_flush(sgx);
 	wmb();
 	sgx_write(sgx, SGX_CORE_BANK(0) + SGX_EVENT_KICK2, 1);
 }

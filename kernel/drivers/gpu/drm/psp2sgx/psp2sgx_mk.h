@@ -62,14 +62,14 @@ enum sgx_mk_hostpost {
 #define SGX_MK_HOSTCTL		0x000	/* host control block (16 u32 = 64 bytes) */
 #define SGX_MK_HOSTPOST		0x040	/* host post block (16 u32 = 64 bytes) */
 #define SGX_MK_CODE		0x080	/* microkernel code */
-#define SGX_MK_KICKER		0x200	/* kicker code */
+#define SGX_MK_KICKER		0x200	/* 4-byte event kicker word */
 #define SGX_MK_EVENT_PDS	0x240	/* event PDS program */
 #define SGX_MK_CODE_BASE	4	/* code base index for the microkernel */
 #define SGX_MK_JOB_INDEX	32	/* job code starts at instruction index 32 */
 #define SGX_MK_CODE_MAX		0x100	/* max microkernel code size (instructions) */
 #define SGX_MK_JOB_CODE_MAX	0x200	/* max job code size (instructions) */
-#define SGX_MK_REGION_USED	0x280	/* total kregion size used */
-#define SGX_MK_JOB_CODE		0x080	/* job code offset in kregion */
+#define SGX_MK_JOB_CODE		0x2a0	/* job code offset in kregion */
+#define SGX_MK_REGION_USED	0xaa0	/* total kregion size used */
 
 /* Wait polling limits */
 #define PSP2SGX_WAIT_MAX_POLLS	0xffff	/* max poll rounds for a wait */
