@@ -125,7 +125,7 @@ int psp2sgx_hw_build_kregion(struct psp2sgx_device *sgx)
 static int psp2sgx_hw_build_event_pds(struct psp2sgx_device *sgx)
 {
 	u32 *prog = (u32 *)((u8 *)sgx->kregion + SGX_MK_EVENT_PDS);
-	u32 doutu0 = sgx_pds_doutu0(SGX_MK_CODE_BASE, 0, 8);
+	u32 doutu0 = sgx_pds_doutu0(SGX_MK_CODE_BASE, 0, 0x80);
 
 	sgx_pds_event_program(prog, 0, doutu0);
 	wmb();
