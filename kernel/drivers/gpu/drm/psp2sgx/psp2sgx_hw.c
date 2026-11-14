@@ -67,6 +67,24 @@ static void psp2sgx_start(struct psp2sgx_device *sgx)
 	udelay(10);
 }
 
+unsigned int psp2sgx_hw_cores(void)
+{
+	return cores;
+}
+
+int psp2sgx_hw_build_kregion(struct psp2sgx_device *sgx)
+{
+	u32 len = 0;
+	int err;
+
+	err = sgx_mk_build((u64 *)sgx->kregion, sgx->kregion_size / sizeof(u64), &len,
+			   SGX_KREGION_VA);
+	if (err)
+		return err;
+	dev_info(sgx->dev, "microkernel: %u instructions\n", len);
+	return 0;
+}
+
 int psp2sgx_hw_power_on(struct psp2sgx_device *sgx)
 {
 	if (sgx->power_smc >= 0) {
