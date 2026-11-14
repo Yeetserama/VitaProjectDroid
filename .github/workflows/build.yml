@@ -358,7 +358,7 @@ jobs:
           fi
           getent hosts archive.ubuntu.com || true
 
-      - name: Install Mesa build dependencies
+      - name: Install ARM cross-compiler
         timeout-minutes: 20
         run: |
           apt_opts=(
@@ -368,12 +368,9 @@ jobs:
             -o Acquire::https::Timeout=20
           )
           packages=(
-            autoconf automake libtool pkg-config
-            libdrm-dev libglapi-dev libgl1-mesa-dev
-            libx11-dev libxrandr-dev libxcb1-dev
             gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
-            bc bison device-tree-compiler e2fsprogs flex
-            libelf-dev libssl-dev python3 unzip xz-utils
+            libdrm-dev
+            make
           )
           for attempt in 1 2 3; do
             echo "apt attempt $attempt"
@@ -393,13 +390,29 @@ jobs:
           set +e
           cd mesa/drivers/psp2sgx
 
-          # Fix Makefile for cross-compilation
-          sed -i 's/CC ?= gcc/CC ?= arm-linux-gnueabihf-gcc/' Makefile
-          sed -i 's/CC = gcc/CC = arm-linux-gnueabihf-gcc/' Makefile
+          # Create simple Makefile for ARM cross-compilation
+          cat > Makefile.arm << 'EOF'
+CC = arm-linux-gnueabihf-gcc
+CFLAGS = -O2 -Wall -Wextra -I. -I/usr/include -I/usr/include/drm
+SRCS = psp2sgx_gallium.c psp2sgx_driver.c
+OBJS = $(SRCS:.c=.o)
+TARGET = libpsp2sgx.a
+
+all: $(TARGET)
+
+%.o: %.c psp2sgx_gallium.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(TARGET): $(OBJS)
+	arm-linux-gnueabihf-ar rcs $@ $(OBJS)
+
+clean:
+	rm -f *.o $(TARGET)
+EOF
 
           # Build
-          make clean 2>/dev/null || true
-          make 2>&1 | tee mesa-build.log
+          make clean -f Makefile.arm 2>/dev/null || true
+          make -f Makefile.arm 2>&1 | tee mesa-build.log
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
             echo "## Mesa build failed (exit $status)"
@@ -407,8 +420,6 @@ jobs:
             exit "$status"
           fi
 
-          # Install
-          sudo make install PREFIX=/usr/local/arm-psp2sgx
           echo "Mesa psp2sgx driver built successfully"
 
       - name: Upload Mesa psp2sgx driver artifacts
@@ -417,16 +428,17 @@ jobs:
           name: mesa-psp2sgx-arm
           if-no-files-found: error
           path: |
-            mesa/drivers/psp2sgx/libpsp2sgx.la
+            mesa/drivers/psp2sgx/libpsp2sgx.a
+            mesa/drivers/psp2sgx/psp2sgx_gallium.o
+            mesa/drivers/psp2sgx/psp2sgx_driver.o
             mesa/drivers/psp2sgx/psp2sgx_gallium.h
             mesa/drivers/psp2sgx/psp2sgx_driver.c
             mesa/drivers/psp2sgx/psp2sgx_gallium.c
-            mesa/drivers/psp2sgx/Makefile
-            mesa/drivers/psp2sgx/Makefile.am
+            mesa/drivers/psp2sgx/Makefile.arm
             mesa/drivers/psp2sgx/screen.conf
             mesa/gralloc/psp2sgx_gralloc.h
             mesa/gralloc/psp2sgx_gralloc.c
             mesa/hwcomposer/psp2sgx_hwcomposer.h
             mesa/hwcomposer/psp2sgx_hwcomposer.c
-            /usr/local/arm-psp2sgx/lib/
-            /usr/local/arm-psp2sgx/include/psp2sgx/
+            mesa/hwcomposer/Makefile
+            mesa/hwcomposer/Makefile.am
