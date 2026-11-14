@@ -333,3 +333,100 @@ jobs:
             build/out/initramfs.cpio-2.2
             build/out/SHA256SUMS-2.2
             build/out/build-info.txt-2.2
+
+  build-mesa-psp2sgx:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: []
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Prefer public DNS
+        run: |
+          if [ -f /etc/resolv.conf ]; then
+            sudo cp /etc/resolv.conf /etc/resolv.conf.platform
+            {
+              echo 'nameserver 1.1.1.1'
+              echo 'nameserver 8.8.8.8'
+              echo 'options timeout:2 attempts:2'
+              cat /etc/resolv.conf.platform
+            } > /tmp/resolv.conf.new
+            sudo cp /tmp/resolv.conf.new /etc/resolv.conf \
+              || echo "could not rewrite /etc/resolv.conf; keeping the platform resolver"
+          fi
+          getent hosts archive.ubuntu.com || true
+
+      - name: Install Mesa build dependencies
+        timeout-minutes: 20
+        run: |
+          apt_opts=(
+            -o Acquire::ForceIPv4=true
+            -o Acquire::Retries=5
+            -o Acquire::http::Timeout=20
+            -o Acquire::https::Timeout=20
+          )
+          packages=(
+            autoconf automake libtool pkg-config
+            libdrm-dev libglapi-dev libgl1-mesa-dev
+            libx11-dev libxrandr-dev libxcb1-dev
+            gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+            bc bison device-tree-compiler e2fsprogs flex
+            libelf-dev libssl-dev python3 unzip xz-utils
+          )
+          for attempt in 1 2 3; do
+            echo "apt attempt $attempt"
+            if sudo apt-get "${apt_opts[@]}" update \
+               && sudo apt-get "${apt_opts[@]}" install \
+                    -y --no-install-recommends "${packages[@]}"; then
+              exit 0
+            fi
+            echo "apt attempt $attempt failed; retrying"
+            sleep $((attempt * 10))
+          done
+          echo "could not install build dependencies after 3 attempts" >&2
+          exit 1
+
+      - name: Build Mesa psp2sgx gallium driver (ARM)
+        run: |
+          set +e
+          cd mesa/drivers/psp2sgx
+
+          # Fix Makefile for cross-compilation
+          sed -i 's/CC ?= gcc/CC ?= arm-linux-gnueabihf-gcc/' Makefile
+          sed -i 's/CC = gcc/CC = arm-linux-gnueabihf-gcc/' Makefile
+
+          # Build
+          make clean 2>/dev/null || true
+          make 2>&1 | tee mesa-build.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            echo "## Mesa build failed (exit $status)"
+            tail -n 100 mesa-build.log
+            exit "$status"
+          fi
+
+          # Install
+          sudo make install PREFIX=/usr/local/arm-psp2sgx
+          echo "Mesa psp2sgx driver built successfully"
+
+      - name: Upload Mesa psp2sgx driver artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mesa-psp2sgx-arm
+          if-no-files-found: error
+          path: |
+            mesa/drivers/psp2sgx/libpsp2sgx.la
+            mesa/drivers/psp2sgx/psp2sgx_gallium.h
+            mesa/drivers/psp2sgx/psp2sgx_driver.c
+            mesa/drivers/psp2sgx/psp2sgx_gallium.c
+            mesa/drivers/psp2sgx/Makefile
+            mesa/drivers/psp2sgx/Makefile.am
+            mesa/drivers/psp2sgx/screen.conf
+            mesa/gralloc/psp2sgx_gralloc.h
+            mesa/gralloc/psp2sgx_gralloc.c
+            mesa/hwcomposer/psp2sgx_hwcomposer.h
+            mesa/hwcomposer/psp2sgx_hwcomposer.c
+            /usr/local/arm-psp2sgx/lib/
+            /usr/local/arm-psp2sgx/include/psp2sgx/
