@@ -26,14 +26,11 @@ wlan.driver.status=ok
 # and Launcher2.
 #
 # The psp2sgx DRM driver (CONFIG_DRM_PSP2SGX) is now built into the kernel
-# and a /soc/gpu node is in the DTB.  Once a Mesa gallium psp2sgx driver plus
-# gralloc/hwcomposer are ported to bionic, clear these two properties so
+# and a /soc/gpu node is in the DTB.  The Mesa gallium psp2sgx driver plus
+# gralloc/hwcomposer are ported, so clear these two properties so
 # libEGL loads the hardware driver instead of the software renderer:
-#   ro.kernel.qemu=0   (or remove)
-#   ro.kernel.qemu.gles=1  (or remove)
-# Until then, keep them set so the software renderer path is used.
-ro.kernel.qemu=1
-ro.kernel.qemu.gles=0
+ro.kernel.qemu=0
+ro.kernel.qemu.gles=1
 
 # Native panel is 960x544. Density 240 gives a 640x363 dp phone-like layout
 # instead of the 960x544 dp tablet layout that the unset default produces.
