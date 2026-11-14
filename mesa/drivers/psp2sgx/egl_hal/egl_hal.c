@@ -21,7 +21,7 @@ typedef EGLBoolean (*sw_term_fn)(EGLDisplay);
 typedef const char *(*sw_qs_fn)(EGLDisplay, EGLint);
 typedef EGLBoolean (*sw_get_configs_fn)(EGLDisplay, EGLConfig *, EGLint, EGLint *);
 typedef EGLBoolean (*sw_choose_config_fn)(EGLDisplay, const EGLint *, EGLConfig *, EGLint, EGLint *);
-typedef EGLSurface (*sw_create_ws_fn)(EGLDisplay, EGLConfig, void *, const EGLint *);
+typedef EGLSurface (*sw_create_ws_fn)(EGLDisplay, EGLConfig, EGLNativeWindowType, const EGLint *);
 typedef EGLBoolean (*sw_destroy_surf_fn)(EGLDisplay, EGLSurface);
 typedef EGLContext (*sw_create_ctx_fn)(EGLDisplay, EGLConfig, EGLContext, const EGLint *);
 typedef EGLBoolean (*sw_destroy_ctx_fn)(EGLDisplay, EGLContext);
@@ -69,6 +69,7 @@ static void load_sw(void) {
     sw_query_surface = (sw_query_surface_fn)dlsym(sw_lib, "eglQuerySurface");
 }
 
+/* EGL 1.4 entry points */
 EGLAPI EGLint EGLAPIENTRY eglGetError(void) { return EGL_SUCCESS; }
 
 EGLAPI EGLDisplay EGLAPIENTRY eglGetDisplay(EGLNativeDisplayType id) {
@@ -153,7 +154,8 @@ EGLAPI EGLBoolean EGLAPIENTRY eglGetConfigAttrib(EGLDisplay dpy, EGLConfig cfg,
 }
 
 EGLAPI EGLSurface EGLAPIENTRY eglCreateWindowSurface(EGLDisplay dpy, EGLConfig cfg,
-                                                      void *win, const EGLint *attr) {
+                                                      EGLNativeWindowType win,
+                                                      const EGLint *attr) {
     if (sw_create_ws) return sw_create_ws(dpy, cfg, win, attr);
     return (EGLSurface)1;
 }
@@ -197,37 +199,38 @@ EGLAPI EGLBoolean EGLAPIENTRY eglQuerySurface(EGLDisplay dpy, EGLSurface surf,
                                                EGLint attr, EGLint *val) { *val = 0; return EGL_TRUE; }
 EGLAPI EGLBoolean EGLAPIENTRY eglWaitGL(void) { return EGL_TRUE; }
 EGLAPI EGLBoolean EGLAPIENTRY eglWaitNative(EGLint engine) { return EGL_TRUE; }
-EGLAPI EGLBoolean EGLAPIENTRY eglCopyBuffers(EGLDisplay dpy, EGLSurface surf, void *buf) { return EGL_TRUE; }
+EGLAPI EGLBoolean EGLAPIENTRY eglCopyBuffers(EGLDisplay dpy, EGLSurface surf,
+                                              EGLNativePixmapType target) { return EGL_TRUE; }
 
-EGLAPI void *EGLAPIENTRY eglGetProcAddress(const char *name) {
+EGLAPI __eglMustCastToProperFunctionPointerType EGLAPIENTRY eglGetProcAddress(const char *name) {
     if (sw_lib) {
         void *p = dlsym(sw_lib, name);
-        if (p) return p;
+        if (p) return (__eglMustCastToProperFunctionPointerType)p;
     }
-    if (!strcmp(name, "eglGetDisplay")) return (void *)eglGetDisplay;
-    if (!strcmp(name, "eglInitialize")) return (void *)eglInitialize;
-    if (!strcmp(name, "eglTerminate")) return (void *)eglTerminate;
-    if (!strcmp(name, "eglQueryString")) return (void *)eglQueryString;
-    if (!strcmp(name, "eglGetConfigs")) return (void *)eglGetConfigs;
-    if (!strcmp(name, "eglChooseConfig")) return (void *)eglChooseConfig;
-    if (!strcmp(name, "eglGetConfigAttrib")) return (void *)eglGetConfigAttrib;
-    if (!strcmp(name, "eglCreateWindowSurface")) return (void *)eglCreateWindowSurface;
-    if (!strcmp(name, "eglDestroySurface")) return (void *)eglDestroySurface;
-    if (!strcmp(name, "eglCreateContext")) return (void *)eglCreateContext;
-    if (!strcmp(name, "eglDestroyContext")) return (void *)eglDestroyContext;
-    if (!strcmp(name, "eglMakeCurrent")) return (void *)eglMakeCurrent;
-    if (!strcmp(name, "eglSwapBuffers")) return (void *)eglSwapBuffers;
-    if (!strcmp(name, "eglGetProcAddress")) return (void *)eglGetProcAddress;
-    if (!strcmp(name, "eglWaitGL")) return (void *)eglWaitGL;
-    if (!strcmp(name, "eglWaitNative")) return (void *)eglWaitNative;
-    if (!strcmp(name, "eglCopyBuffers")) return (void *)eglCopyBuffers;
-    if (!strcmp(name, "eglSurfaceAttrib")) return (void *)eglSurfaceAttrib;
-    if (!strcmp(name, "eglBindTexImage")) return (void *)eglBindTexImage;
-    if (!strcmp(name, "eglReleaseTexImage")) return (void *)eglReleaseTexImage;
-    if (!strcmp(name, "eglSwapInterval")) return (void *)eglSwapInterval;
-    if (!strcmp(name, "eglGetCurrentContext")) return (void *)eglGetCurrentContext;
-    if (!strcmp(name, "eglGetCurrentSurface")) return (void *)eglGetCurrentSurface;
-    if (!strcmp(name, "eglGetCurrentDisplay")) return (void *)eglGetCurrentDisplay;
-    if (!strcmp(name, "eglQuerySurface")) return (void *)eglQuerySurface;
+    if (!strcmp(name, "eglGetDisplay")) return (__eglMustCastToProperFunctionPointerType)eglGetDisplay;
+    if (!strcmp(name, "eglInitialize")) return (__eglMustCastToProperFunctionPointerType)eglInitialize;
+    if (!strcmp(name, "eglTerminate")) return (__eglMustCastToProperFunctionPointerType)eglTerminate;
+    if (!strcmp(name, "eglQueryString")) return (__eglMustCastToProperFunctionPointerType)eglQueryString;
+    if (!strcmp(name, "eglGetConfigs")) return (__eglMustCastToProperFunctionPointerType)eglGetConfigs;
+    if (!strcmp(name, "eglChooseConfig")) return (__eglMustCastToProperFunctionPointerType)eglChooseConfig;
+    if (!strcmp(name, "eglGetConfigAttrib")) return (__eglMustCastToProperFunctionPointerType)eglGetConfigAttrib;
+    if (!strcmp(name, "eglCreateWindowSurface")) return (__eglMustCastToProperFunctionPointerType)eglCreateWindowSurface;
+    if (!strcmp(name, "eglDestroySurface")) return (__eglMustCastToProperFunctionPointerType)eglDestroySurface;
+    if (!strcmp(name, "eglCreateContext")) return (__eglMustCastToProperFunctionPointerType)eglCreateContext;
+    if (!strcmp(name, "eglDestroyContext")) return (__eglMustCastToProperFunctionPointerType)eglDestroyContext;
+    if (!strcmp(name, "eglMakeCurrent")) return (__eglMustCastToProperFunctionPointerType)eglMakeCurrent;
+    if (!strcmp(name, "eglSwapBuffers")) return (__eglMustCastToProperFunctionPointerType)eglSwapBuffers;
+    if (!strcmp(name, "eglGetProcAddress")) return (__eglMustCastToProperFunctionPointerType)eglGetProcAddress;
+    if (!strcmp(name, "eglWaitGL")) return (__eglMustCastToProperFunctionPointerType)eglWaitGL;
+    if (!strcmp(name, "eglWaitNative")) return (__eglMustCastToProperFunctionPointerType)eglWaitNative;
+    if (!strcmp(name, "eglCopyBuffers")) return (__eglMustCastToProperFunctionPointerType)eglCopyBuffers;
+    if (!strcmp(name, "eglSurfaceAttrib")) return (__eglMustCastToProperFunctionPointerType)eglSurfaceAttrib;
+    if (!strcmp(name, "eglBindTexImage")) return (__eglMustCastToProperFunctionPointerType)eglBindTexImage;
+    if (!strcmp(name, "eglReleaseTexImage")) return (__eglMustCastToProperFunctionPointerType)eglReleaseTexImage;
+    if (!strcmp(name, "eglSwapInterval")) return (__eglMustCastToProperFunctionPointerType)eglSwapInterval;
+    if (!strcmp(name, "eglGetCurrentContext")) return (__eglMustCastToProperFunctionPointerType)eglGetCurrentContext;
+    if (!strcmp(name, "eglGetCurrentSurface")) return (__eglMustCastToProperFunctionPointerType)eglGetCurrentSurface;
+    if (!strcmp(name, "eglGetCurrentDisplay")) return (__eglMustCastToProperFunctionPointerType)eglGetCurrentDisplay;
+    if (!strcmp(name, "eglQuerySurface")) return (__eglMustCastToProperFunctionPointerType)eglQuerySurface;
     return NULL;
 }
