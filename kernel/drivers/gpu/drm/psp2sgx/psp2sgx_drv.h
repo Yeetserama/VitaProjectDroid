@@ -110,6 +110,15 @@ static inline struct psp2sgx_device *to_psp2sgx(struct drm_device *drm)
 	return container_of(drm, struct psp2sgx_device, drm);
 }
 
+/* psp2sgx.diag=1: log each probe/hardware stage for a fault that follows */
+extern bool psp2sgx_verbose;
+
+#define psp2sgx_dbg(sgx, fmt, ...)					\
+	do {								\
+		if (psp2sgx_verbose)					\
+			dev_info((sgx)->dev, fmt, ##__VA_ARGS__);	\
+	} while (0)
+
 static inline u32 sgx_read(struct psp2sgx_device *sgx, u32 reg)
 {
 	return readl(sgx->regs + reg);

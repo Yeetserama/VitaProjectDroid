@@ -34,6 +34,9 @@ fail() {
     # later snapshot that no longer contains the reason.
     if [ "$UR0_MOUNTED" = 1 ]; then
         $BB dmesg > /mnt/ur0/android/boot.log 2>/dev/null
+        if [ "$DIAG" = 1 ]; then
+            $BB dmesg > /mnt/ur0/android/dmesg-gpu.txt 2>/dev/null
+        fi
         $BB sync
         log "kernel log saved to ur0:/android/boot.log"
     fi
@@ -63,6 +66,16 @@ $BB mount -t devtmpfs devtmpfs /dev 2>/dev/null
 
 $BB mount -t proc proc /proc 2>/dev/null
 $BB mount -t sysfs sysfs /sys 2>/dev/null
+
+# vita.diag=1: keep a continuously synced full dmesg on ur0 and run the
+# deferred GPU probe only after that mirror is live.  See psp2sgx.defer.
+DIAG=0
+if $BB grep -q 'vita.diag=1' /proc/cmdline 2>/dev/null; then
+    DIAG=1
+    if ! $BB grep -q 'psp2sgx.defer=1' /proc/cmdline 2>/dev/null; then
+        log "WARNING: vita.diag=1 without psp2sgx.defer=1; a probe oops will still kill init"
+    fi
+fi
 
 # The SCE partition parser exposes ur0 as partition 12 of the eMMC.
 wait_for /dev/mmcblk0p12 20 || true
@@ -94,6 +107,61 @@ mkdir -p /mnt/ur0/android 2>/dev/null
 $BB dmesg > /mnt/ur0/android/boot.log 2>/dev/null
 $BB sync
 log "initial kernel log saved (ur0:/android/boot.log); vita-log takes over"
+
+# Atomically replace dmesg-gpu.txt.  A snapshot is synced under a temporary
+# name first, so a reset in the middle leaves the previous complete file.
+diag_snapshot() {
+    if $BB dmesg > /mnt/ur0/android/dmesg-gpu.txt.new 2>/dev/null &&
+       [ -s /mnt/ur0/android/dmesg-gpu.txt.new ]; then
+        $BB sync
+        $BB mv -f /mnt/ur0/android/dmesg-gpu.txt.new \
+            /mnt/ur0/android/dmesg-gpu.txt 2>/dev/null
+        $BB sync
+    fi
+}
+
+if [ "$DIAG" = 1 ]; then
+    $BB mkdir -p /tmp
+    diag_snapshot
+    log "diagnostic mode: mirroring dmesg to ur0:/android/dmesg-gpu.txt"
+
+    # Keep a snapshot running while the probe executes.  The deferred probe
+    # normally kills only its own thread, but if the kernel wedges the last
+    # synced snapshot is still on ur0.
+    (
+        while true; do
+            diag_snapshot
+            $BB sleep 1
+        done
+    ) &
+    DIAG_PID=$!
+    $BB sleep 1
+
+    log "releasing the deferred psp2sgx probe"
+    : > /tmp/psp2sgx-go
+    $BB sync
+
+    # platform_driver_register() runs the probe synchronously in the
+    # psp2sgx-probe thread.  Wait for that thread to return or die.
+    i=0
+    while [ $i -lt 45 ]; do
+        if ! $BB grep -q 'psp2sgx-probe' /proc/[0-9]*/comm 2>/dev/null; then
+            break
+        fi
+        $BB sleep 1
+        i=$((i + 1))
+    done
+    log "psp2sgx probe thread finished after ${i}s; saving final snapshot"
+
+    kill "$DIAG_PID" 2>/dev/null
+    wait "$DIAG_PID" 2>/dev/null
+    diag_snapshot
+    $BB dmesg 2>/dev/null | $BB grep -iE \
+        'psp2sgx|sgx|gpu|pervasive|unhandled|unable to handle|internal error|oops|bug:|call trace|backtrace|pc is at|lr is at|code:' \
+        > /mnt/ur0/android/psp2sgx.log 2>/dev/null
+    $BB sync
+    log "diagnostic log saved (ur0:/android/dmesg-gpu.txt)"
+fi
 
 # The late_start scripts are embedded in the initramfs, but Wi-Fi and logging
 # fixes are much easier to iterate on when they can be replaced from ur0.

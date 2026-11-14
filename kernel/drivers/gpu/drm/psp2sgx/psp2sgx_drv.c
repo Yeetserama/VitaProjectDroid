@@ -9,10 +9,14 @@
  * drm_sched.  Userspace (Mesa's psp2sgx gallium driver) compiles shaders to
  * USSE and PDS code and builds the vertex and render state.
  */
+#include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/dma-mapping.h>
+#include <linux/fs.h>
+#include <linux/kthread.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
+#include <linux/namei.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 
@@ -29,6 +33,24 @@
 static bool psp2sgx_enable = true;
 module_param_named(enable, psp2sgx_enable, bool, 0444);
 MODULE_PARM_DESC(enable, "Power up and drive the GPU (default: true)");
+
+/*
+ * psp2sgx.defer=1 registers the driver from a kthread.  A probe that faults
+ * then kills that thread instead of PID 1, so the kernel finishes booting
+ * and dmesg keeps the oops for debugging.
+ */
+static bool psp2sgx_defer;
+module_param_named(defer, psp2sgx_defer, bool, 0444);
+MODULE_PARM_DESC(defer, "Register the driver from a kthread (diagnostics)");
+
+/*
+ * psp2sgx.diag=1 logs every probe and hardware stage.  Together with
+ * psp2sgx.defer=1 the last line in dmesg identifies the first access that
+ * faults, even when the oops itself scrolls off the screen.
+ */
+bool psp2sgx_verbose;
+module_param_named(diag, psp2sgx_verbose, bool, 0444);
+MODULE_PARM_DESC(diag, "Log probe and hardware stages (diagnostics)");
 
 static int psp2sgx_ioctl_get_param(struct drm_device *drm, void *data,
 				   struct drm_file *file)
@@ -170,6 +192,11 @@ static irqreturn_t psp2sgx_irq_thread(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static void psp2sgx_stage(struct psp2sgx_device *sgx, const char *stage)
+{
+	psp2sgx_dbg(sgx, "probe: %s\n", stage);
+}
+
 static int psp2sgx_probe(struct platform_device *pdev)
 {
 	struct psp2sgx_device *sgx;
@@ -179,6 +206,7 @@ static int psp2sgx_probe(struct platform_device *pdev)
 	if (!psp2sgx_enable)
 		return -ENODEV;
 
+	dev_info(&pdev->dev, "probe: start\n");
 	sgx = devm_drm_dev_alloc(&pdev->dev, &psp2sgx_driver, struct psp2sgx_device, drm);
 	if (IS_ERR(sgx))
 		return PTR_ERR(sgx);
@@ -187,6 +215,7 @@ static int psp2sgx_probe(struct platform_device *pdev)
 	spin_lock_init(&sgx->slc_lock);
 	psp2sgx_diag_init(sgx);
 	platform_set_drvdata(pdev, sgx);
+	psp2sgx_stage(sgx, "drm device allocated");
 
 	sgx->regs = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(sgx->regs))
@@ -194,6 +223,7 @@ static int psp2sgx_probe(struct platform_device *pdev)
 	sgx->irq = platform_get_irq(pdev, 0);
 	if (sgx->irq < 0)
 		return sgx->irq;
+	psp2sgx_stage(sgx, "registers mapped and IRQ found");
 
 	/* sony,power-smc = <service bus>: switch the power domain through the monitor */
 	sgx->power_smc = -1;
@@ -205,44 +235,56 @@ static int psp2sgx_probe(struct platform_device *pdev)
 	err = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32));
 	if (err)
 		return err;
+	psp2sgx_stage(sgx, "DMA mask set");
 
 	err = psp2sgx_cdram_init(sgx);
 	if (err)
 		return err;
 	psp2sgx_cdram_debugfs_init(sgx);
+	psp2sgx_stage(sgx, "CDRAM initialised");
 
+	psp2sgx_stage(sgx, "powering on");
 	err = psp2sgx_hw_power_on(sgx);
 	if (err)
 		return err;
 	dev_info(&pdev->dev, "SGX core id %#x, revision %#x\n", sgx->core_id,
 		 sgx->core_revision);
+	psp2sgx_stage(sgx, "powered on");
 
 	err = psp2sgx_kregion_init(sgx);
 	if (err)
 		goto err_power;
+	psp2sgx_stage(sgx, "kernel region allocated");
 	err = psp2sgx_hw_build_kregion(sgx);
 	if (err)
 		goto err_kregion;
+	psp2sgx_stage(sgx, "microkernel built");
 	err = psp2sgx_hw_init(sgx);
 	if (err)
 		goto err_kregion;
+	psp2sgx_stage(sgx, "hardware initialised");
 
 	err = psp2sgx_sched_init(sgx);
 	if (err)
 		goto err_kregion;
+	psp2sgx_stage(sgx, "scheduler initialised");
 
 	err = devm_request_threaded_irq(&pdev->dev, sgx->irq, psp2sgx_irq,
 					psp2sgx_irq_thread, IRQF_SHARED,
 					dev_name(&pdev->dev), sgx);
 	if (err)
 		goto err_sched;
+	psp2sgx_stage(sgx, "IRQ requested");
 
 	/* a failed self-test is logged; jobs will time out with a register dump */
 	psp2sgx_diag_selftest(sgx);
+	psp2sgx_stage(sgx, "self-test done");
 
+	psp2sgx_stage(sgx, "registering DRM device");
 	err = drm_dev_register(&sgx->drm, 0);
 	if (err)
 		goto err_sched;
+	psp2sgx_stage(sgx, "DRM device registered");
 	return 0;
 
 err_sched:
@@ -284,7 +326,63 @@ static struct platform_driver psp2sgx_platform_driver = {
 		.of_match_table = psp2sgx_of_match,
 	},
 };
-module_platform_driver(psp2sgx_platform_driver);
+static bool psp2sgx_diag_go_seen(void)
+{
+	struct path path;
+	int err;
+
+	err = kern_path("/tmp/psp2sgx-go", LOOKUP_FOLLOW, &path);
+	if (err)
+		return false;
+	path_put(&path);
+	return true;
+}
+
+/*
+ * Wait for /init.vita to mount ur0 and start the log mirror before the probe
+ * can fault.  The file lives on the initramfs /tmp, so it cannot be stale
+ * from an earlier boot.  If it never appears (normal boot, or a broken
+ * initramfs), probe after 30 s anyway.
+ */
+static void psp2sgx_wait_for_diag_go(void)
+{
+	unsigned int i;
+
+	for (i = 0; i < 300; i++) {
+		if (psp2sgx_diag_go_seen())
+			return;
+		msleep(100);
+	}
+	pr_warn("psp2sgx: no /tmp/psp2sgx-go after 30 s; probing anyway\n");
+}
+
+static int psp2sgx_register_thread(void *data)
+{
+	int err;
+
+	pr_info("psp2sgx: deferred registration waiting for init.vita\n");
+	psp2sgx_wait_for_diag_go();
+	pr_info("psp2sgx: registering the platform driver\n");
+	err = platform_driver_register(&psp2sgx_platform_driver);
+	if (err)
+		pr_err("psp2sgx: deferred driver registration failed: %d\n",
+		       err);
+	else
+		pr_info("psp2sgx: platform driver registered\n");
+	return err;
+}
+
+static int __init psp2sgx_init(void)
+{
+	struct task_struct *task;
+
+	if (!psp2sgx_defer)
+		return platform_driver_register(&psp2sgx_platform_driver);
+
+	task = kthread_run(psp2sgx_register_thread, NULL, "psp2sgx-probe");
+	return PTR_ERR_OR_ZERO(task);
+}
+device_initcall(psp2sgx_init);
 
 MODULE_DESCRIPTION("PlayStation Vita SGX543MP4+ DRM driver");
 MODULE_LICENSE("GPL");

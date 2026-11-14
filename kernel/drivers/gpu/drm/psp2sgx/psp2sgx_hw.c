@@ -54,24 +54,30 @@ static u32 psp2sgx_smc_bus(u32 service, u32 bus, u32 command)
  */
 static void psp2sgx_start(struct psp2sgx_device *sgx)
 {
+	psp2sgx_dbg(sgx, "start: master core and clock gates\n");
 	sgx_write(sgx, SGX_MASTER_CORE, clamp(cores, 1u, 4u) - 1);
 	sgx_write(sgx, SGX_MASTER_CLKGATECTL2, 0x2a9);
 	sgx_write(sgx, SGX_MASTER_CLKGATECTL, 0xaa);
+	psp2sgx_dbg(sgx, "start: master soft reset\n");
 	sgx_write(sgx, SGX_MASTER_SOFT_RESET, 0x7ff);
 	wmb();
 	udelay(10);
+	psp2sgx_dbg(sgx, "start: BIF and SLC\n");
 	sgx_write(sgx, SGX_MASTER_BIF_CTRL, 0);
 	sgx_write(sgx, SGX_MASTER_SLC_CTRL, 0x4c800);
 	sgx_write(sgx, SGX_MASTER_SLC_CTRL_BYPASS, 0x4000000);
 	wmb();
 	udelay(10);
+	psp2sgx_dbg(sgx, "start: release reset\n");
 	sgx_write(sgx, SGX_MASTER_SOFT_RESET, 0);
 	wmb();
 	udelay(10);
+	psp2sgx_dbg(sgx, "start: core clock gates\n");
 	sgx_write(sgx, SGX_CLKGATECTL, 0x2aaaaa);
 	sgx_write(sgx, SGX_CLKGATECTL2, 0xa8a8aaa);
 	wmb();
 	udelay(10);
+	psp2sgx_dbg(sgx, "start: done\n");
 }
 
 unsigned int psp2sgx_hw_cores(void)
@@ -125,6 +131,7 @@ int psp2sgx_hw_power_on(struct psp2sgx_device *sgx)
 		err = psp2sgx_perv_map(sgx);
 		if (err)
 			return err;
+		psp2sgx_dbg(sgx, "power: pervasive registers mapped\n");
 
 		reset = readl(sgx->perv_reset + PERVASIVE_GPU_OFFSET);
 		gate = readl(sgx->perv_gate + PERVASIVE_GPU_OFFSET);
@@ -132,7 +139,9 @@ int psp2sgx_hw_power_on(struct psp2sgx_device *sgx)
 			 reset, gate);
 
 		/* the G2 probe's sequence: deassert reset, then enable the clock */
+		psp2sgx_dbg(sgx, "power: writing reset 0\n");
 		writel(0, sgx->perv_reset + PERVASIVE_GPU_OFFSET);
+		psp2sgx_dbg(sgx, "power: writing gate 1\n");
 		writel(1, sgx->perv_gate + PERVASIVE_GPU_OFFSET);
 		wmb();
 		udelay(100);
@@ -144,9 +153,13 @@ int psp2sgx_hw_power_on(struct psp2sgx_device *sgx)
 			 reset, gate);
 	}
 
+	psp2sgx_dbg(sgx, "power: starting SGX\n");
 	psp2sgx_start(sgx);
+	psp2sgx_dbg(sgx, "power: reading core id\n");
 	sgx->core_id = sgx_read(sgx, SGX_CORE_ID);
 	sgx->core_revision = sgx_read(sgx, SGX_CORE_REVISION);
+	psp2sgx_dbg(sgx, "power: core id %#x revision %#x\n", sgx->core_id,
+		    sgx->core_revision);
 	return 0;
 }
 
