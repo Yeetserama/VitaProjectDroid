@@ -222,6 +222,18 @@ fi
 # boot.  An ext4 cache image can be added later by attaching it to /dev/loop2
 # and changing the fstab entry.
 
+# Install Mesa psp2sgx gallium driver libraries into /system/lib.
+# The libraries live in the initramfs (built by CI from Mesa source) and
+# need to be copied to /system/lib so libEGL can load the hardware driver.
+if [ -e /libpsp2sgx.a ]; then
+    log "Installing Mesa psp2sgx driver libraries"
+    mount -o remount,rw /system 2>/dev/null
+    mkdir -p /system/lib 2>/dev/null
+    cp /libpsp2sgx.a /system/lib/ 2>/dev/null
+    mount -o remount,ro /system 2>/dev/null
+    log "Mesa psp2sgx driver libraries installed"
+fi
+
 # A modest VM tweak for a 512 MiB device with zram.
 echo 100 > /proc/sys/vm/swappiness 2>/dev/null
 

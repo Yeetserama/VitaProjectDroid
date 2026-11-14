@@ -118,6 +118,16 @@ cp -a "$OVERLAY/." "$STAGE/"
 # so the checks below do not fail on an otherwise correct tree.
 chmod 0755 "$STAGE/init.vita" "$STAGE/vita-log.sh" "$STAGE/vita-net.sh" "$STAGE/vita-ui.sh" "$STAGE/vita-dhcp.sh" 2>/dev/null || true
 
+# Install Mesa psp2sgx gallium driver libraries into initramfs so init.vita
+# can copy them to /system/lib at boot.  MESA_LIBS_DIR points to the directory
+# containing the cross-compiled ARM libraries (built by CI).
+if [ -n "${MESA_LIBS_DIR:-}" ] && [ -d "$MESA_LIBS_DIR" ]; then
+    echo "==> installing Mesa psp2sgx driver libraries"
+    mkdir -p "$STAGE/lib"
+    cp "$MESA_LIBS_DIR"/libpsp2sgx.a "$STAGE/lib/" 2>/dev/null || true
+    cp "$MESA_LIBS_DIR"/psp2sgx_gallium.h "$STAGE/lib/" 2>/dev/null || true
+fi
+
 echo "==> installing busybox"
 mkdir -p "$STAGE/sbin" "$STAGE/bin"
 cp "$BUSYBOX" "$STAGE/sbin/busybox"
