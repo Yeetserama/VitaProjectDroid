@@ -229,7 +229,9 @@ if [ -e /libpsp2sgx.a ]; then
     log "Installing Mesa psp2sgx driver libraries"
     mount -o remount,rw /system 2>/dev/null
     mkdir -p /system/lib 2>/dev/null
+    mkdir -p /system/lib/hw/egl 2>/dev/null
     cp /libpsp2sgx.a /system/lib/ 2>/dev/null
+    cp /libEGL_psp2sgx.so /system/lib/hw/egl/ 2>/dev/null
     mount -o remount,ro /system 2>/dev/null
     log "Mesa psp2sgx driver libraries installed"
 fi

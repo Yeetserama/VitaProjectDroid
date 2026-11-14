@@ -3,21 +3,32 @@
 
 CC = arm-linux-gnueabihf-gcc
 AR = arm-linux-gnueabihf-ar
-CFLAGS = -O2 -Wall -Wextra -I. -Istub_headers -I/usr/include -I/usr/include/drm
+CFLAGS = -O2 -Wall -Wextra -I. -Istub_headers -Iegl_hal -I/usr/include -I/usr/include/drm
+LDFLAGS = -shared -Wl,-soname,libEGL_psp2sgx.so -ldl
 
 SRCS = psp2sgx_gallium.c psp2sgx_driver.c
 OBJS = $(SRCS:.c=.o)
-TARGET = libpsp2sgx.a
+STATIC_TARGET = libpsp2sgx.a
 
-all: $(TARGET)
+EGL_SRCS = egl_hal/egl_hal.c
+EGL_OBJS = $(EGL_SRCS:.c=.o)
+SHARED_TARGET = libEGL_psp2sgx.so
+
+all: $(STATIC_TARGET) $(SHARED_TARGET)
 
 %.o: %.c psp2sgx_gallium.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(TARGET): $(OBJS)
+egl_hal/%.o: egl_hal/%.c psp2sgx_gallium.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(STATIC_TARGET): $(OBJS)
 	$(AR) rcs $@ $(OBJS)
 
+$(SHARED_TARGET): $(EGL_OBJS) $(STATIC_TARGET)
+	$(CC) $(LDFLAGS) -o $@ $(EGL_OBJS) $(STATIC_TARGET)
+
 clean:
-	rm -f *.o $(TARGET)
+	rm -f *.o $(STATIC_TARGET) $(SHARED_TARGET) egl_hal/*.o
 
 .PHONY: all clean

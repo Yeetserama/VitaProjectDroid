@@ -125,6 +125,7 @@ if [ -n "${MESA_LIBS_DIR:-}" ] && [ -d "$MESA_LIBS_DIR" ]; then
     echo "==> installing Mesa psp2sgx driver libraries"
     mkdir -p "$STAGE/lib"
     cp "$MESA_LIBS_DIR"/libpsp2sgx.a "$STAGE/lib/" 2>/dev/null || true
+    cp "$MESA_LIBS_DIR"/libEGL_psp2sgx.so "$STAGE/lib/" 2>/dev/null || true
     cp "$MESA_LIBS_DIR"/psp2sgx_gallium.h "$STAGE/lib/" 2>/dev/null || true
 fi
 
