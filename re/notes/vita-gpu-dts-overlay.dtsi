@@ -1,28 +1,26 @@
 /*
- * Vita GPU Device Tree Overlay (for G2 read-only probe)
+ * Vita GPU Device Tree Overlay (SceGpuEs4 findings)
  *
- * Apply this to vita1000.dts / vita.dtsi to enable the GPU probe.
- * The actual base address, IRQ, clock, and reset must be determined
- * from SceGpuEs4 reverse engineering (G1 phase).
- *
- * This is a TEMPLATE — fill in the actual values after G1.
+ * Values derived from gpu_es4.skprx; see re/notes/gpu-irq.md.
+ * Apply to vita1000.dts / vita.dtsi to enable the psp2sgx probe.
+ * The clock and reset consumers are still unknown.
  */
 
 / {
-	/* GPU node for SGX543MP4+ read-only probe */
-	gpu: gpu@XXXXXXXX {
-		compatible = "img,sgx543mp4", "img,sgx543", "img,sgx";
-		reg = <0xXXXXXXXX 0x10000>;	/* Physical base + 64KB register space */
-		interrupts = <GIC_SPI XX IRQ_TYPE_LEVEL_HIGH>;	/* IRQ from G1 */
-		clocks = <&XXXX CLK_ID_XXXX>;	/* Clock from G1 (syscon/clkgen) */
+	/* GPU node for SGX543MP4+ */
+	gpu: gpu@e8400000 {
+		compatible = "sony,vita-gpu";
+		reg = <0xe8400000 0x20000>;	/* SGX register block */
+		interrupts = <GIC_SPI 20 IRQ_TYPE_LEVEL_HIGH>;	/* VitaOS 0x34 - 0x20 */
+		clocks = <&XXXX CLK_ID_XXXX>;	/* clock still unknown */
 		clock-names = "gpu";
-		resets = <&syscon RESET_BIT_XXXX>;	/* Reset bit from G1 */
+		resets = <&syscon RESET_BIT_XXXX>;	/* reset still unknown */
 		reset-names = "gpu";
 		status = "okay";
 	};
 };
 
-/* 
+/*
  * Also need to add clock/reset to syscon if not present:
  *
  * &syscon {

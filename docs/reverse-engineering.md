@@ -78,7 +78,8 @@ proves the I2C path and clock work.
 | Driver family | PVR Services (`PVRSRV*` exports) | High |
 | Exported probes | `sceGpuGetRegisterDump`, `sceGpuMmuMapMemory`, `SceGpuInfo` | Wiki |
 | MMU heaps | General `0x7000000 -> 0x40000000`, TA `0x7000001 -> 0x50000000` | Wiki, unverified |
-| CPU base / IRQ / clock / reset | Unknown | Blocking unknown |
+| Register base / IRQ | `0xe8400000` (128 KiB), GIC SPI 20 (VitaOS code `0x34`) | High, from `SceGpuEs4` RE |
+| Clock / reset | Unknown | Blocking unknown |
 | Firmware | Inside VitaOS, encrypted/signed | High |
 | Userspace UMD / GLSL compiler | Sony `libgxm`/SceGpu, not reusable | High |
 

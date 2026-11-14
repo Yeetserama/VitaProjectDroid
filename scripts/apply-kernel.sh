@@ -251,15 +251,21 @@ fi
 
 # GPU DTB node for the psp2sgx driver (G4 - CONFIG_DRM_PSP2SGX).
 # The SGX register block is at PA 0xe8400000, size 0x20000.
-# TODO: determine the correct GPU IRQ and add an "interrupts" property here.
-# Without it, platform_get_irq() returns -EINVAL and the driver will not probe.
+#
+# IRQ: SceGpuEs4 initialises its device context at 0x810151a4 and stores
+# the VitaOS interrupt code 0x34 at +0x24 (movs r3, #0x34 / str r3, [r4, #0x24]
+# at 0x8100d218).  The same field is passed to sceKernelRegisterIntrHandler
+# at 0x8100d2bc.  VitaOS intr code = GIC hardware IRQ ID, GIC_SPI = code - 32,
+# so the GPU is GIC_SPI 20 (0x34 - 0x20).
 if [ "$ANDROID_VERSION" = "4.2" ] || [ "$ANDROID_VERSION" = "4.2.2" ]; then
     fdtput -p "$OUT/vita.dtb${VERSION_SUFFIX}" /soc/gpu compatible "sony,vita-gpu"
     fdtput -p "$OUT/vita.dtb${VERSION_SUFFIX}" /soc/gpu reg 0xe8400000 0x20000
+    fdtput -p "$OUT/vita.dtb${VERSION_SUFFIX}" /soc/gpu interrupts 0 20 4
     fdtput -p "$OUT/vita.dtb${VERSION_SUFFIX}" /soc/gpu status "okay"
     if [ "$ANDROID_VERSION" != "2.2" ]; then
         fdtput -p "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc/gpu compatible "sony,vita-gpu"
         fdtput -p "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc/gpu reg 0xe8400000 0x20000
+        fdtput -p "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc/gpu interrupts 0 20 4
         fdtput -p "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc/gpu status "okay"
     fi
 fi
