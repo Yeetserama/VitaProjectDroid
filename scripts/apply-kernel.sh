@@ -257,16 +257,27 @@ fi
 # at 0x8100d218).  The same field is passed to sceKernelRegisterIntrHandler
 # at 0x8100d2bc.  VitaOS intr code = GIC hardware IRQ ID, GIC_SPI = code - 32,
 # so the GPU is GIC_SPI 20 (0x34 - 0x20).
+#
+# -t is mandatory: without it dtc's fdtput formats every value with sscanf
+# "%d" and silently writes zeros for strings and 0x... literals.
 if [ "$ANDROID_VERSION" = "4.2" ] || [ "$ANDROID_VERSION" = "4.2.2" ]; then
-    fdtput -p "$OUT/vita.dtb${VERSION_SUFFIX}" /soc/gpu compatible "sony,vita-gpu"
-    fdtput -p "$OUT/vita.dtb${VERSION_SUFFIX}" /soc/gpu reg 0xe8400000 0x20000
-    fdtput -p "$OUT/vita.dtb${VERSION_SUFFIX}" /soc/gpu interrupts 0 20 4
-    fdtput -p "$OUT/vita.dtb${VERSION_SUFFIX}" /soc/gpu status "okay"
+    gpu_props() {
+        local dtb=$1
+        fdtput -p -t s "$dtb" /soc/gpu compatible "sony,vita-gpu"
+        fdtput -p -t x "$dtb" /soc/gpu reg 0xe8400000 0x20000
+        fdtput -p -t x "$dtb" /soc/gpu interrupts 0 0x14 0x4
+        fdtput -p -t s "$dtb" /soc/gpu status "okay"
+        # Fail the build if the node did not land intact.
+        [ "$(fdtget -t s "$dtb" /soc/gpu compatible)" = "sony,vita-gpu" ] \
+            || die "GPU compatible missing in $dtb"
+        [ "$(fdtget -t x "$dtb" /soc/gpu reg)" = "e8400000 20000" ] \
+            || die "GPU reg wrong in $dtb"
+        [ "$(fdtget -t x "$dtb" /soc/gpu interrupts)" = "0 14 4" ] \
+            || die "GPU interrupts wrong in $dtb"
+    }
+    gpu_props "$OUT/vita.dtb${VERSION_SUFFIX}"
     if [ "$ANDROID_VERSION" != "2.2" ]; then
-        fdtput -p "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc/gpu compatible "sony,vita-gpu"
-        fdtput -p "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc/gpu reg 0xe8400000 0x20000
-        fdtput -p "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc/gpu interrupts 0 20 4
-        fdtput -p "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}" /soc/gpu status "okay"
+        gpu_props "$OUT/vita-selinux-disabled.dtb${VERSION_SUFFIX}"
     fi
 fi
 
