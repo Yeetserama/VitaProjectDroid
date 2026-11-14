@@ -16,6 +16,9 @@ re/dumps/
 re/ghidra/
 re/tmp/
 
+# Decrypted firmware dumps (see re/README.md)
+fwdump/
+
 # Python
 __pycache__/
 *.py[cod]
