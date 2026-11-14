@@ -25,15 +25,30 @@ MODULE_PARM_DESC(cores, "Number of SGX cores to use (1-4)");
 /*
  * The GPU power domain belongs to the secure world: SceGpuEs4 switches it
  * with SMC 0x110 (bus 0 = GPU, 1 = start, 0 = stop), and the monitor then
- * programs the Pervasive reset and gate registers.  Whether the monitor is
- * still resident depends on how Linux was started, so the device tree says
- * whether to call it (sony,power-smc).  Without the monitor, the same two
- * Pervasive registers can be driven directly; the G2 probe did that and
- * read the SGX core ID afterwards.
+ * programs the Pervasive registers.  Whether the monitor is still resident
+ * depends on how Linux was started, so the device tree says whether to call
+ * it (sony,power-smc).  Without the monitor, drive the same registers
+ * directly, replaying GpuPowerOn from Sony's secure Pervasive driver
+ * (pervasive_tzs.c): isolate off, bus idle, compat RAM gate, GPU gate mask
+ * 0xf000f, power clock, reset release.  Writing only the reset and gate bit
+ * 0 leaves the core clocks off and the first SGX read aborts.
  */
+#define PERVASIVE_MISC_BASE	0xe3100000
 #define PERVASIVE_RESET_BASE	0xe3101000
 #define PERVASIVE_GATE_BASE	0xe3102000
+#define PERVASIVE_BASECLK_BASE	0xe3103000
 #define PERVASIVE_GPU_OFFSET	0x10
+#define PERVASIVE_COMPATRAM_OFFSET	0x28
+
+#define PERVASIVE_MISC_GPU_ISOLATION	0x34
+#define PERVASIVE_MISC_COMPATRAM_ISOLATION	0x3c
+#define PERVASIVE_MISC_GPU_BUS_IDLE	0x54
+#define PERVASIVE_MISC_BUS_IDLE_STATUS	0xc0
+
+#define PERVASIVE_BASECLK_GPU	0x10
+#define PERVASIVE_BASECLK_ALLEGREX	0x1e0
+#define PERVASIVE_GPU_POWER_CLOCK	0x4000000	/* allegrexClock bit 26 */
+#define PERVASIVE_GPU_GATE_MASK	0xf000f
 
 static u32 psp2sgx_smc_bus(u32 service, u32 bus, u32 command)
 {
@@ -100,6 +115,12 @@ int psp2sgx_hw_build_kregion(struct psp2sgx_device *sgx)
 
 static int psp2sgx_perv_map(struct psp2sgx_device *sgx)
 {
+	if (!sgx->perv_misc) {
+		sgx->perv_misc = devm_ioremap(sgx->dev, PERVASIVE_MISC_BASE,
+					      SZ_4K);
+		if (!sgx->perv_misc)
+			return -ENOMEM;
+	}
 	if (!sgx->perv_reset) {
 		sgx->perv_reset = devm_ioremap(sgx->dev, PERVASIVE_RESET_BASE,
 					       SZ_4K);
@@ -112,7 +133,80 @@ static int psp2sgx_perv_map(struct psp2sgx_device *sgx)
 		if (!sgx->perv_gate)
 			return -ENOMEM;
 	}
+	if (!sgx->perv_baseclk) {
+		sgx->perv_baseclk = devm_ioremap(sgx->dev, PERVASIVE_BASECLK_BASE,
+						 SZ_4K);
+		if (!sgx->perv_baseclk)
+			return -ENOMEM;
+	}
 	return 0;
+}
+
+/*
+ * Log every Pervasive word the power sequence touches, so a boot log shows
+ * which stage did not take effect if the SGX read still faults.
+ */
+static void psp2sgx_perv_log(struct psp2sgx_device *sgx, const char *stage)
+{
+	dev_info(sgx->dev,
+		 "pervasive %s: misc iso %#x/%#x busidle %#x status %#x "
+		 "baseclk %#x/%#x reset %#x gate %#x/%#x\n",
+		 stage,
+		 readl(sgx->perv_misc + PERVASIVE_MISC_GPU_ISOLATION),
+		 readl(sgx->perv_misc + PERVASIVE_MISC_COMPATRAM_ISOLATION),
+		 readl(sgx->perv_misc + PERVASIVE_MISC_GPU_BUS_IDLE),
+		 readl(sgx->perv_misc + PERVASIVE_MISC_BUS_IDLE_STATUS),
+		 readl(sgx->perv_baseclk + PERVASIVE_BASECLK_GPU),
+		 readl(sgx->perv_baseclk + PERVASIVE_BASECLK_ALLEGREX),
+		 readl(sgx->perv_reset + PERVASIVE_GPU_OFFSET),
+		 readl(sgx->perv_gate + PERVASIVE_GPU_OFFSET),
+		 readl(sgx->perv_gate + PERVASIVE_COMPATRAM_OFFSET));
+}
+
+static void psp2sgx_perv_set(void __iomem *page, u32 offset, u32 mask, bool on)
+{
+	u32 value = readl(page + offset);
+
+	if (on)
+		value |= mask;
+	else
+		value &= ~mask;
+	writel(value, page + offset);
+	/* order the write before the next register access */
+	(void)readl(page + offset);
+}
+
+/*
+ * GpuBusIdle from Sony's driver: ask the bus to idle, wait for the request
+ * to be taken and reported done, then acknowledge it.  The monitor spins
+ * forever; bound each wait so a stuck bus cannot hang the probe thread.
+ */
+static int psp2sgx_perv_bus_idle(struct psp2sgx_device *sgx)
+{
+	void __iomem *request = sgx->perv_misc + PERVASIVE_MISC_GPU_BUS_IDLE;
+	void __iomem *status = sgx->perv_misc + PERVASIVE_MISC_BUS_IDLE_STATUS;
+	u32 value;
+	int err;
+
+	writel(1, request);
+	err = readl_poll_timeout_atomic(request, value, !(value & 1), 1,
+					10000);
+	if (err) {
+		dev_warn(sgx->dev, "power: bus idle request stuck at %#x\n",
+			 value);
+		return err;
+	}
+	err = readl_poll_timeout_atomic(status, value, value & 2, 1, 10000);
+	if (err) {
+		dev_warn(sgx->dev, "power: bus idle not reported, status %#x\n",
+			 value);
+		return err;
+	}
+	writel(2, status);
+	err = readl_poll_timeout_atomic(status, value, !(value & 2), 1, 10000);
+	if (err)
+		dev_warn(sgx->dev, "power: bus idle ack stuck at %#x\n", value);
+	return err;
 }
 
 int psp2sgx_hw_power_on(struct psp2sgx_device *sgx)
@@ -126,31 +220,49 @@ int psp2sgx_hw_power_on(struct psp2sgx_device *sgx)
 			dev_warn(sgx->dev, "power SMC returned %#x\n", ret);
 		usleep_range(1000, 2000);
 	} else {
-		u32 reset, gate;
-
 		err = psp2sgx_perv_map(sgx);
 		if (err)
 			return err;
 		psp2sgx_dbg(sgx, "power: pervasive registers mapped\n");
+		psp2sgx_perv_log(sgx, "before power-on");
 
-		reset = readl(sgx->perv_reset + PERVASIVE_GPU_OFFSET);
-		gate = readl(sgx->perv_gate + PERVASIVE_GPU_OFFSET);
-		dev_info(sgx->dev, "pervasive GPU reset %#x gate %#x before power-on\n",
-			 reset, gate);
+		psp2sgx_dbg(sgx, "power: reset enable\n");
+		psp2sgx_perv_set(sgx->perv_reset, PERVASIVE_GPU_OFFSET, 1, true);
+		psp2sgx_dbg(sgx, "power: isolation disable\n");
+		writel(0, sgx->perv_misc + PERVASIVE_MISC_GPU_ISOLATION);
+		psp2sgx_dbg(sgx, "power: bus idle\n");
+		err = psp2sgx_perv_bus_idle(sgx);
+		if (err)
+			dev_warn(sgx->dev, "power: bus idle failed: %d, continuing\n",
+				 err);
+		psp2sgx_dbg(sgx, "power: compat ram gate on\n");
+		psp2sgx_perv_set(sgx->perv_gate, PERVASIVE_COMPATRAM_OFFSET, 1,
+				 true);
+		psp2sgx_dbg(sgx, "power: gate on\n");
+		psp2sgx_perv_set(sgx->perv_gate, PERVASIVE_GPU_OFFSET,
+				 PERVASIVE_GPU_GATE_MASK, true);
+		psp2sgx_dbg(sgx, "power: compat ram gate off\n");
+		psp2sgx_perv_set(sgx->perv_gate, PERVASIVE_COMPATRAM_OFFSET, 1,
+				 false);
+		psp2sgx_dbg(sgx, "power: gate off\n");
+		psp2sgx_perv_set(sgx->perv_gate, PERVASIVE_GPU_OFFSET,
+				 PERVASIVE_GPU_GATE_MASK, false);
+		psp2sgx_dbg(sgx, "power: clock enable\n");
+		psp2sgx_perv_set(sgx->perv_baseclk,
+				 PERVASIVE_BASECLK_ALLEGREX,
+				 PERVASIVE_GPU_POWER_CLOCK, true);
+		psp2sgx_dbg(sgx, "power: reset disable\n");
+		psp2sgx_perv_set(sgx->perv_reset, PERVASIVE_GPU_OFFSET, 1,
+				 false);
+		psp2sgx_dbg(sgx, "power: compat ram gate on\n");
+		psp2sgx_perv_set(sgx->perv_gate, PERVASIVE_COMPATRAM_OFFSET, 1,
+				 true);
+		psp2sgx_dbg(sgx, "power: gate on\n");
+		psp2sgx_perv_set(sgx->perv_gate, PERVASIVE_GPU_OFFSET,
+				 PERVASIVE_GPU_GATE_MASK, true);
 
-		/* the G2 probe's sequence: deassert reset, then enable the clock */
-		psp2sgx_dbg(sgx, "power: writing reset 0\n");
-		writel(0, sgx->perv_reset + PERVASIVE_GPU_OFFSET);
-		psp2sgx_dbg(sgx, "power: writing gate 1\n");
-		writel(1, sgx->perv_gate + PERVASIVE_GPU_OFFSET);
-		wmb();
-		udelay(100);
+		psp2sgx_perv_log(sgx, "after power-on");
 		msleep(10);
-
-		reset = readl(sgx->perv_reset + PERVASIVE_GPU_OFFSET);
-		gate = readl(sgx->perv_gate + PERVASIVE_GPU_OFFSET);
-		dev_info(sgx->dev, "pervasive GPU reset %#x gate %#x after power-on\n",
-			 reset, gate);
 	}
 
 	psp2sgx_dbg(sgx, "power: starting SGX\n");
@@ -169,10 +281,16 @@ void psp2sgx_hw_power_off(struct psp2sgx_device *sgx)
 	sgx_write(sgx, SGX_EVENT_HOST_ENABLE2, 0);
 	if (sgx->power_smc >= 0) {
 		psp2sgx_smc_bus(sgx->power_smc, sgx->power_smc_bus, 0);
-	} else if (sgx->perv_reset && sgx->perv_gate) {
-		writel(1, sgx->perv_reset + PERVASIVE_GPU_OFFSET);
-		writel(0, sgx->perv_gate + PERVASIVE_GPU_OFFSET);
-		wmb();
+	} else if (sgx->perv_reset && sgx->perv_gate && sgx->perv_misc &&
+		   sgx->perv_baseclk) {
+		/* GpuPowerOff: reset hold, gates off, power clock off, isolate */
+		psp2sgx_perv_set(sgx->perv_reset, PERVASIVE_GPU_OFFSET, 1, true);
+		psp2sgx_perv_set(sgx->perv_gate, PERVASIVE_GPU_OFFSET,
+				 PERVASIVE_GPU_GATE_MASK, false);
+		psp2sgx_perv_set(sgx->perv_baseclk,
+				 PERVASIVE_BASECLK_ALLEGREX,
+				 PERVASIVE_GPU_POWER_CLOCK, false);
+		writel(1, sgx->perv_misc + PERVASIVE_MISC_GPU_ISOLATION);
 	}
 }
 

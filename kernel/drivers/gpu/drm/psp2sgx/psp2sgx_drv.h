@@ -57,8 +57,10 @@ struct psp2sgx_device {
 
 	int power_smc;
 	u32 power_smc_bus;
+	void __iomem *perv_misc;
 	void __iomem *perv_reset;
 	void __iomem *perv_gate;
+	void __iomem *perv_baseclk;
 
 	u32 core_id;
 	u32 core_revision;
